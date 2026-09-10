@@ -14,6 +14,7 @@ import ssl
 import html
 import subprocess
 import smtplib
+import tempfile
 from datetime import datetime, timedelta
 import urllib.request
 import urllib.parse
@@ -25,6 +26,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "prospector.db")
 PDF_EN = os.path.join(BASE_DIR, "Curriculo_Raphael_Ramos_EN.pdf")
 PDF_PT = os.path.join(BASE_DIR, "Curriculo_Raphael_Ramos_PT_Destaque.pdf")
+HTML_EN = os.path.join(BASE_DIR, "curriculo_en.html")
+HTML_PT = os.path.join(BASE_DIR, "curriculo_pt_destaque.html")
 ENV_PATH = os.path.join(BASE_DIR, ".env")
 
 class Color:
@@ -111,6 +114,7 @@ ANTI_PATTERNS = [
 FAST_ATS_PATTERNS = [
     r"https?://jobs\.ashbyhq\.com/[a-zA-Z0-9_\-]+/[a-zA-Z0-9_\-]+",
     r"https?://boards\.greenhouse\.io/[a-zA-Z0-9_\-]+/jobs/[0-9]+",
+    r"https?://job-boards\.greenhouse\.io/[a-zA-Z0-9_\-]+/jobs/[0-9]+",
     r"https?://jobs\.lever\.co/[a-zA-Z0-9_\-]+/[a-zA-Z0-9_\-]+",
     r"https?://apply\.workable\.com/[a-zA-Z0-9_\-]+/j/[a-zA-Z0-9_\-]+"
 ]
@@ -134,9 +138,9 @@ def extract_contacts(text):
 
 # --- SCRAPERS ---
 
-def mine_github(repos=None, max_per_repo=30, junior_only=True):
+def mine_github(repos=None, max_per_repo=50, junior_only=True):
     if repos is None:
-        repos = ["backend-br/vagas", "datascience-br/vagas"]
+        repos = ["backend-br/vagas", "datascience-br/vagas", "react-brasil/vagas"]
     results = []
     print(f"{Color.CYAN}🔍 Minerando GitHub Issues em {', '.join(repos)}...{Color.RESET}")
 
@@ -144,7 +148,6 @@ def mine_github(repos=None, max_per_repo=30, junior_only=True):
         url = f"https://api.github.com/repos/{repo}/issues?state=open&per_page={max_per_repo}"
         data = fetch_json(url)
         if not data or not isinstance(data, list):
-            print(f"{Color.YELLOW}⚠️ Não foi possível obter issues de {repo}.{Color.RESET}")
             continue
 
         for issue in data:
@@ -156,8 +159,8 @@ def mine_github(repos=None, max_per_repo=30, junior_only=True):
             labels_str = " ".join(labels)
             full_text = f"{title} {body} {labels_str}"
 
-            is_junior = any(k in full_text.lower() for k in ["júnior", "junior", "estágio", "estagio", "entry level", "trainee", "associate"])
-            is_python_backend = any(k in full_text.lower() for k in ["python", "backend", "dados", "data", "eng"])
+            is_junior = any(k in full_text.lower() for k in ["júnior", "junior", "estágio", "estagio", "entry level", "trainee", "associate", "pleno"])
+            is_python_backend = any(k in full_text.lower() for k in ["python", "backend", "dados", "data", "eng", "node", "postgresql"])
 
             if junior_only and not is_junior:
                 continue
@@ -192,7 +195,7 @@ def mine_github(repos=None, max_per_repo=30, junior_only=True):
             })
     return results
 
-def mine_hacker_news(query="Python", hits=20):
+def mine_hacker_news(query="Python", hits=25):
     print(f"{Color.CYAN}🔍 Buscando no 'Ask HN: Who is hiring?' do mês...{Color.RESET}")
     search_url = "https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&query=Who%20is%20hiring&hitsPerPage=1"
     story_data = fetch_json(search_url)
@@ -220,20 +223,68 @@ def mine_hacker_news(query="Python", hits=20):
         role = parts[1] if len(parts) > 1 else first_sentence[:50]
         emails, fast_links = extract_contacts(raw_html)
 
+        labels = ["Remote", "International", "HN"]
+        if any(k in clean_text.lower() for k in ["yc", "y combinator", "yc s", "yc w"]):
+            labels.append("YC Startup")
+
         results.append({
             "source": f"Hacker News ({story_title[:22]}...)",
             "title": f"{company} - {role}",
             "company": company,
             "url": f"https://news.ycombinator.com/item?id={hit.get('objectID')}",
             "created_at": hit.get("created_at", "")[:10],
-            "labels": ["Remote", "International", "HN"],
+            "labels": labels,
             "emails": emails,
             "fast_links": fast_links,
             "raw_body": clean_text
         })
     return results
 
-# --- MODELOS DE MENSAGEM (< 400 CARACTERES) ---
+GREENHOUSE_COMPANIES = [
+    "canonical", "gitlab", "brex", "automattic", "reddit", 
+    "elastic", "posthog", "supabase", "cloudflare"
+]
+
+def mine_greenhouse(query="Python", companies=None):
+    if companies is None:
+        companies = GREENHOUSE_COMPANIES
+    print(f"{Color.CYAN}🔍 Minerando APIs públicas de ATS Ágeis (Greenhouse Startups & Tech)...{Color.RESET}")
+    results = []
+    
+    for comp in companies:
+        url = f"https://boards-api.greenhouse.io/v1/boards/{comp}/jobs"
+        data = fetch_json(url)
+        if not data or not data.get("jobs"):
+            continue
+
+        for j in data.get("jobs", []):
+            title = j.get("title", "")
+            title_lower = title.lower()
+
+            # Filtro por relevância técnica
+            is_eng = any(k in title_lower for k in [
+                "software engineer", "backend", "systems engineer", "platform",
+                "data engineer", "infrastructure", "python", "associate"
+            ])
+            is_non_eng = any(k in title_lower for k in ["counsel", "account executive", "recruiter", "marketing", "sales", "finance", "analyst"])
+
+            if not is_eng or is_non_eng:
+                continue
+
+            results.append({
+                "source": f"Greenhouse ({comp.capitalize()})",
+                "title": f"{comp.capitalize()} - {title}",
+                "company": comp.capitalize(),
+                "url": j.get("absolute_url", ""),
+                "created_at": j.get("updated_at", "")[:10] if j.get("updated_at") else datetime.now().strftime("%Y-%m-%d"),
+                "labels": ["Greenhouse", "Remote/Fast-ATS", "International"],
+                "emails": [],
+                "fast_links": [j.get("absolute_url", "")],
+                "raw_body": f"Position at {comp.capitalize()}: {title}. Apply via quick Greenhouse board."
+            })
+    return results
+
+# --- MOTOR DE MENSAGENS (< 400 CARACTERES) ---
 
 TEMPLATES = {
     "1": {
@@ -266,7 +317,7 @@ TEMPLATES = {
     },
     "3": {
         "name": "Modelo 3: Recrutador Técnico / Talent Acquisition",
-        "subject": "Candidatura: {vaga} - Raphael Ramos",
+        "subject": "Candidatura: {vaga} - {empresa} - Raphael Ramos",
         "template": (
             "Olá {nome},\n\n"
             "Notei a oportunidade de {vaga} na {empresa}.\n"
@@ -286,155 +337,89 @@ def get_message_content(model_key, nome="Hiring Team", empresa="Company", vaga="
     body = config["template"].format(nome=nome, empresa=empresa, vaga=vaga)
     return subject, body
 
-# --- COMANDOS CLI ---
+# --- CV TAILORING ENGINE (OPÇÃO 3) ---
 
-def cmd_send(args):
-    """Envia o e-mail diretamente via SMTP do Gmail com o PDF anexado em 1 segundo."""
-    load_env()
-    user = os.environ.get("EMAIL_USER", "raphaelramosc@gmail.com")
-    password = os.environ.get("EMAIL_PASS")
+def tailor_cv(empresa, vaga="Software Engineer", skills=None, jd_text="", lang="en"):
+    """Gera versão sob medida do currículo alinhada com as palavras-chave da vaga."""
+    print(f"\n{Color.CYAN}🎯 Iniciando CV Tailoring Engine para: {Color.BOLD}{empresa}{Color.RESET}")
+    clean_empresa = re.sub(r"[^a-zA-Z0-9]", "_", empresa)
+    
+    # 1. Analisa competências a destacar
+    target_skills = []
+    if skills:
+        target_skills = [s.strip() for s in skills.split(",") if s.strip()]
+    if jd_text:
+        # Detecta palavras-chave da vaga
+        potential_kw = [
+            "FastAPI", "Django", "Flask", "PostgreSQL", "Redis", "Docker", "Kubernetes",
+            "Distributed Systems", "Concurrency", "High Throughput", "Telemetry",
+            "Machine Learning", "Data Pipelines", "HDF5", "Kafka", "RabbitMQ", "Microservices",
+            "Clean Architecture", "Linux", "AsyncIO", "REST APIs", "C++", "Go"
+        ]
+        for kw in potential_kw:
+            if re.search(r"\b" + re.escape(kw) + r"\b", jd_text, re.IGNORECASE):
+                if kw not in target_skills:
+                    target_skills.append(kw)
 
-    if not password:
-        print(f"{Color.RED}❌ Erro: Senha de App não encontrada no arquivo .env nem em EMAIL_PASS.{Color.RESET}")
-        print("Configure o arquivo .env com EMAIL_USER e EMAIL_PASS.")
-        return
+    print(f"Palavras-chave destacadas para alinhamento: {Color.GREEN}{', '.join(target_skills) if target_skills else 'Python, Backend, Distributed Systems'}{Color.RESET}")
 
-    init_db()
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT id, company, title, source, contact_info FROM leads WHERE id = ?", (args.id,))
-    row = cur.fetchone()
-    if not row:
-        print(f"{Color.RED}Lead #{args.id} não encontrado.{Color.RESET}")
-        return
-    lid, comp, title, src, contact = row
+    # 2. Carrega base HTML
+    base_html_path = HTML_EN if lang == "en" else HTML_PT
+    with open(base_html_path, "r", encoding="utf-8") as f:
+        html_content = f.read()
 
-    emails = re.findall(EMAIL_REGEX, contact or "")
-    if not emails:
-        print(f"{Color.RED}❌ Lead #{lid} não possui um endereço de e-mail direto cadastrado.{Color.RESET}")
-        return
-    to_addr = emails[0]
-
-    is_intl = "hacker news" in src.lower()
-    model = "2" if is_intl else "1"
-    subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
-    pdf_path = PDF_EN if is_intl else PDF_PT
-
-    print(f"\n{Color.CYAN}📨 Preparando envio para:{Color.RESET} {to_addr}")
-    print(f"🏢 Empresa: {comp} | Vaga: {title}")
-    print(f"📎 Anexo: {os.path.basename(pdf_path)}")
-    print(f"📝 Assunto: {subj}\n")
-
-    msg = MIMEMultipart()
-    msg["From"] = f"Raphael Ramos <{user}>"
-    msg["To"] = to_addr
-    msg["Subject"] = subj
-    msg.attach(MIMEText(body, "plain", "utf-8"))
-
-    if os.path.exists(pdf_path):
-        with open(pdf_path, "rb") as f:
-            part = MIMEApplication(f.read(), Name=os.path.basename(pdf_path))
-            part["Content-Disposition"] = f'attachment; filename="{os.path.basename(pdf_path)}"'
-            msg.attach(part)
-    else:
-        print(f"{Color.YELLOW}⚠️ Alerta: PDF {pdf_path} não encontrado no diretório.{Color.RESET}")
-
-    try:
-        print(f"{Color.BOLD}🚀 Conectando ao smtp.gmail.com...{Color.RESET}")
-        server = smtplib.SMTP("smtp.gmail.com", 587, timeout=15)
-        server.starttls()
-        server.login(user, password.replace(" ", ""))
-        server.sendmail(user, [to_addr], msg.as_string())
-        server.quit()
-
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cur.execute("UPDATE leads SET status = 'mensagem_enviada', contacted_at = ? WHERE id = ?", (now_str, lid))
-        conn.commit()
-        print(f"\n{Color.GREEN}{Color.BOLD}✅ E-mail enviado com sucesso para {to_addr}!{Color.RESET}")
-        print(f"{Color.GREEN}Funil atualizado: Lead #{lid} marcado como 'mensagem_enviada' (Follow-up D+5 ativado).{Color.RESET}\n")
-    except Exception as e:
-        print(f"\n{Color.RED}❌ Falha no envio SMTP: {e}{Color.RESET}\n")
-    finally:
-        conn.close()
-
-def cmd_gmail(args):
-    """Abre o Gmail Web no navegador com campos preenchidos."""
-    init_db()
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT id, company, title, source, contact_info FROM leads WHERE id = ?", (args.id,))
-    row = cur.fetchone()
-    if not row:
-        print("Lead não encontrado.")
-        return
-    lid, comp, title, src, contact = row
-
-    emails = re.findall(EMAIL_REGEX, contact or "")
-    to_addr = emails[0] if emails else ""
-    is_intl = "hacker news" in src.lower()
-    model = "2" if is_intl else "1"
-    subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
-
-    gmail_url = (
-        "https://mail.google.com/mail/?view=cm&fs=1"
-        f"&to={urllib.parse.quote(to_addr)}"
-        f"&su={urllib.parse.quote(subj)}"
-        f"&body={urllib.parse.quote(body)}"
+    # 3. Customiza Headline
+    highlight_tag = target_skills[0] if target_skills else "Distributed Telemetry"
+    new_headline = f"Software Engineer | Backend & Data Systems | Python, Linux, {highlight_tag}"
+    html_content = re.sub(
+        r'<div class="subtitle">.*?</div>',
+        f'<div class="subtitle">{new_headline}</div>',
+        html_content
     )
 
-    print(f"\n{Color.GREEN}🚀 Abrindo Gmail Web...{Color.RESET}")
-    print(f"Destinatário: {to_addr or 'Preencher manualmente'}")
-    subprocess.run(["open", gmail_url])
+    # 4. Salva HTML Customizado
+    output_html_name = f"curriculo_tailored_{clean_empresa}.html"
+    output_html_path = os.path.join(BASE_DIR, output_html_name)
+    with open(output_html_path, "w", encoding="utf-8") as f:
+        f.write(html_content)
 
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cur.execute("UPDATE leads SET status = 'mensagem_enviada', contacted_at = ? WHERE id = ?", (now_str, lid))
-    conn.commit()
-    conn.close()
-    print(f"{Color.GREEN}✅ Lead #{lid} atualizado no funil para 'mensagem_enviada'!{Color.RESET}\n")
+    print(f"📄 Arquivo HTML customizado gerado: {Color.BOLD}{output_html_name}{Color.RESET}")
 
-def cmd_draft(args):
-    """Gera um arquivo .eml com o PDF anexado."""
-    init_db()
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT id, company, title, source, contact_info FROM leads WHERE id = ?", (args.id,))
-    row = cur.fetchone()
-    if not row:
-        print("Lead não encontrado.")
-        return
-    lid, comp, title, src, contact = row
+    # 5. Compila PDF sob medida
+    output_pdf_name = f"Curriculo_Raphael_Ramos_{clean_empresa}.pdf"
+    output_pdf_path = os.path.join(BASE_DIR, output_pdf_name)
 
-    emails = re.findall(EMAIL_REGEX, contact or "")
-    to_addr = emails[0] if emails else ""
-    is_intl = "hacker news" in src.lower()
-    model = "2" if is_intl else "1"
-    subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
-    pdf_path = PDF_EN if is_intl else PDF_PT
+    print(f"⚙️ Compilando PDF sob medida via Chrome headless...")
+    user_dir = tempfile.mkdtemp()
+    cmd = [
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "--headless",
+        "--disable-gpu",
+        "--no-pdf-header-footer",
+        f"--user-data-dir={user_dir}",
+        f"--print-to-pdf={output_pdf_path}",
+        f"file://{output_html_path}"
+    ]
+    try:
+        subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        subprocess.run(["rm", "-rf", user_dir])
+        if os.path.exists(output_pdf_path) and os.path.getsize(output_pdf_path) > 0:
+            print(f"{Color.GREEN}{Color.BOLD}✅ PDF sob medida gerado com sucesso: {output_pdf_name}!{Color.RESET}")
+        else:
+            print(f"{Color.YELLOW}⚠️ HTML pronto. Para gerar o PDF, abra {output_html_name} e imprima como PDF.{Color.RESET}")
+    except Exception as e:
+        subprocess.run(["rm", "-rf", user_dir])
+        print(f"{Color.YELLOW}⚠️ HTML gerado com sucesso. (PDF pode ser impresso direto de {output_html_name}){Color.RESET}")
 
-    msg = MIMEMultipart()
-    msg["From"] = "Raphael Ramos <raphaelramosc@gmail.com>"
-    msg["To"] = to_addr
-    msg["Subject"] = subj
-    msg.attach(MIMEText(body, "plain", "utf-8"))
+    # 6. Gera mensagem sugerida para a empresa
+    model = "2" if lang == "en" else "1"
+    subj, msg = get_message_content(model, nome="Team", empresa=empresa, vaga=vaga)
+    print(f"\n{Color.BOLD}--- Mensagem de Abordagem Sob Medida para {empresa} ---{Color.RESET}")
+    print(f"Assunto: {subj}\n")
+    print(msg)
+    print("-" * 65 + "\n")
 
-    if os.path.exists(pdf_path):
-        with open(pdf_path, "rb") as f:
-            part = MIMEApplication(f.read(), Name=os.path.basename(pdf_path))
-            part["Content-Disposition"] = f'attachment; filename="{os.path.basename(pdf_path)}"'
-            msg.attach(part)
-
-    eml_file = os.path.join(BASE_DIR, f"draft_lead_{lid}.eml")
-    with open(eml_file, "w", encoding="utf-8") as f:
-        f.write(msg.as_string())
-
-    print(f"\n{Color.GREEN}📄 Rascunho gerado com PDF em: {eml_file}{Color.RESET}")
-    subprocess.run(["open", eml_file])
-
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cur.execute("UPDATE leads SET status = 'mensagem_enviada', contacted_at = ? WHERE id = ?", (now_str, lid))
-    conn.commit()
-    conn.close()
-    print(f"{Color.GREEN}✅ Lead #{lid} atualizado para 'mensagem_enviada'!{Color.RESET}\n")
+# --- COMANDOS CLI ---
 
 def cmd_mine(args):
     init_db()
@@ -443,6 +428,8 @@ def cmd_mine(args):
         all_leads.extend(mine_github(junior_only=not args.all_levels))
     if args.source in ["all", "hn"]:
         all_leads.extend(mine_hacker_news(query=args.query))
+    if args.source in ["all", "greenhouse"]:
+        all_leads.extend(mine_greenhouse(query=args.query))
 
     print(f"\n{Color.BOLD}✨ Total minerado: {len(all_leads)} vagas qualificadas.{Color.RESET}\n")
     conn = sqlite3.connect(DB_PATH)
@@ -455,6 +442,8 @@ def cmd_mine(args):
         print(f"[{idx}] {lead['title']} | {lead['company']}")
         if lead["emails"]:
             print(f"    📬 E-mail direto: {', '.join(lead['emails'])}")
+        elif lead["fast_links"]:
+            print(f"    ⚡ ATS Rápido: {lead['fast_links'][0]}")
     conn.commit()
     conn.close()
 
@@ -487,7 +476,7 @@ def cmd_show(args):
         print("Lead não encontrado.")
         return
     lid, comp, title, src, url, contact, raw_body, status = row
-    is_intl = "hacker news" in src.lower()
+    is_intl = "hacker news" in src.lower() or "international" in src.lower() or "greenhouse" in src.lower()
     model = "2" if is_intl else "1"
     subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
     print(f"\n{Color.BOLD}=== LEAD #{lid}: {comp} ==={Color.RESET}")
@@ -496,8 +485,138 @@ def cmd_show(args):
     print(f"URL: {url}")
     print(f"\n{Color.CYAN}Assunto:{Color.RESET} {subj}")
     print(f"{Color.DIM}{'-'*65}{Color.RESET}\n{body}\n{Color.DIM}{'-'*65}{Color.RESET}")
-    print(f"⚡ Disparar agora via SMTP: {Color.BOLD}python3 prospector.py send {lid}{Color.RESET}")
-    print(f"🌐 Abrir no Gmail Web: {Color.BOLD}python3 prospector.py gmail {lid}{Color.RESET}\n")
+    if contact and "@" in contact:
+        print(f"⚡ Disparar agora via SMTP: {Color.BOLD}python3 prospector.py send {lid}{Color.RESET}")
+        print(f"🌐 Abrir no Gmail Web: {Color.BOLD}python3 prospector.py gmail {lid}{Color.RESET}\n")
+    else:
+        print(f"🔗 Candidatura direta no ATS: {Color.GREEN}{url}{Color.RESET}\n")
+
+def cmd_send(args):
+    """Envia o e-mail via SMTP com o PDF anexado."""
+    load_env()
+    user = os.environ.get("EMAIL_USER", "raphaelramosc@gmail.com")
+    password = os.environ.get("EMAIL_PASS")
+
+    if not password:
+        print(f"{Color.RED}❌ Erro: Senha de App não configurada.{Color.RESET}")
+        return
+
+    init_db()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT id, company, title, source, contact_info FROM leads WHERE id = ?", (args.id,))
+    row = cur.fetchone()
+    if not row:
+        print(f"{Color.RED}Lead #{args.id} não encontrado.{Color.RESET}")
+        return
+    lid, comp, title, src, contact = row
+
+    emails = re.findall(EMAIL_REGEX, contact or "")
+    if not emails:
+        print(f"{Color.RED}❌ Lead #{lid} não possui e-mail cadastrado.{Color.RESET}")
+        return
+    to_addr = emails[0]
+
+    is_intl = "hacker news" in src.lower() or "greenhouse" in src.lower() or "international" in src.lower()
+    model = "2" if is_intl else "1"
+    subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
+    pdf_path = PDF_EN if is_intl else PDF_PT
+
+    print(f"\n{Color.CYAN}📨 Enviando para:{Color.RESET} {to_addr}")
+    print(f"🏢 Empresa: {comp} | Assunto: {subj}")
+
+    msg = MIMEMultipart()
+    msg["From"] = f"Raphael Ramos <{user}>"
+    msg["To"] = to_addr
+    msg["Subject"] = subj
+    msg.attach(MIMEText(body, "plain", "utf-8"))
+
+    if os.path.exists(pdf_path):
+        with open(pdf_path, "rb") as f:
+            part = MIMEApplication(f.read(), Name=os.path.basename(pdf_path))
+            part["Content-Disposition"] = f'attachment; filename="{os.path.basename(pdf_path)}"'
+            msg.attach(part)
+
+    try:
+        server = smtplib.SMTP("smtp.gmail.com", 587, timeout=15)
+        server.starttls()
+        server.login(user, password.replace(" ", ""))
+        server.sendmail(user, [to_addr], msg.as_string())
+        server.quit()
+
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("UPDATE leads SET status = 'mensagem_enviada', contacted_at = ? WHERE id = ?", (now_str, lid))
+        conn.commit()
+        print(f"{Color.GREEN}{Color.BOLD}✅ E-mail enviado com sucesso para {to_addr}!{Color.RESET}\n")
+    except Exception as e:
+        print(f"{Color.RED}❌ Falha no envio: {e}{Color.RESET}\n")
+    finally:
+        conn.close()
+
+def cmd_gmail(args):
+    init_db()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT id, company, title, source, contact_info FROM leads WHERE id = ?", (args.id,))
+    row = cur.fetchone()
+    if not row:
+        print("Lead não encontrado.")
+        return
+    lid, comp, title, src, contact = row
+    emails = re.findall(EMAIL_REGEX, contact or "")
+    to_addr = emails[0] if emails else ""
+    is_intl = "hacker news" in src.lower() or "greenhouse" in src.lower()
+    model = "2" if is_intl else "1"
+    subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
+
+    gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={urllib.parse.quote(to_addr)}&su={urllib.parse.quote(subj)}&body={urllib.parse.quote(body)}"
+    print(f"{Color.GREEN}🚀 Abrindo Gmail Web...{Color.RESET}")
+    subprocess.run(["open", gmail_url])
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("UPDATE leads SET status = 'mensagem_enviada', contacted_at = ? WHERE id = ?", (now_str, lid))
+    conn.commit()
+    conn.close()
+
+def cmd_draft(args):
+    init_db()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT id, company, title, source, contact_info FROM leads WHERE id = ?", (args.id,))
+    row = cur.fetchone()
+    if not row:
+        print("Lead não encontrado.")
+        return
+    lid, comp, title, src, contact = row
+    emails = re.findall(EMAIL_REGEX, contact or "")
+    to_addr = emails[0] if emails else ""
+    is_intl = "hacker news" in src.lower() or "greenhouse" in src.lower()
+    model = "2" if is_intl else "1"
+    subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
+    pdf_path = PDF_EN if is_intl else PDF_PT
+
+    msg = MIMEMultipart()
+    msg["From"] = "Raphael Ramos <raphaelramosc@gmail.com>"
+    msg["To"] = to_addr
+    msg["Subject"] = subj
+    msg.attach(MIMEText(body, "plain", "utf-8"))
+
+    if os.path.exists(pdf_path):
+        with open(pdf_path, "rb") as f:
+            part = MIMEApplication(f.read(), Name=os.path.basename(pdf_path))
+            part["Content-Disposition"] = f'attachment; filename="{os.path.basename(pdf_path)}"'
+            msg.attach(part)
+
+    eml_file = os.path.join(BASE_DIR, f"draft_lead_{lid}.eml")
+    with open(eml_file, "w", encoding="utf-8") as f:
+        f.write(msg.as_string())
+
+    print(f"{Color.GREEN}📄 Rascunho gerado em: {eml_file}{Color.RESET}")
+    subprocess.run(["open", eml_file])
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("UPDATE leads SET status = 'mensagem_enviada', contacted_at = ? WHERE id = ?", (now_str, lid))
+    conn.commit()
+    conn.close()
 
 def cmd_followups(args):
     init_db()
@@ -514,13 +633,13 @@ def cmd_followups(args):
     conn.close()
 
     if not rows:
-        print(f"\n{Color.GREEN}🎉 Nenhum follow-up pendente! Todos os contatos estão dentro de 5 dias úteis.{Color.RESET}\n")
+        print(f"\n{Color.GREEN}🎉 Nenhum follow-up pendente para hoje!{Color.RESET}\n")
         return
 
     print(f"\n{Color.RED}{Color.BOLD}⚠️ ALERTA DE FOLLOW-UP (D+5): {len(rows)} contato(s) aguardando recontato!{Color.RESET}\n")
     for r in rows:
         lid, comp, title, src, c_date = r
-        is_intl = "hacker news" in src.lower()
+        is_intl = "hacker news" in src.lower() or "greenhouse" in src.lower()
         print(f"📌 [ID {lid}] {comp} - {title} (Contatado em: {c_date})")
         if is_intl:
             print(f"Hi Team, just following up to see if my background in high-throughput backend pipelines fits your needs at {comp}. Best regards!")
@@ -542,27 +661,43 @@ def main():
     parser = argparse.ArgumentParser(description="Prospector CLI - Mineração Técnica & Funil de Prospecção Ágil")
     subparsers = parser.add_subparsers(dest="command")
 
-    p_mine = subparsers.add_parser("mine", help="Minerar vagas")
-    p_mine.add_argument("--source", choices=["all", "github", "hn"], default="all")
+    # mine
+    p_mine = subparsers.add_parser("mine", help="Minerar vagas (GitHub, Hacker News, Greenhouse)")
+    p_mine.add_argument("--source", choices=["all", "github", "hn", "greenhouse"], default="all")
     p_mine.add_argument("--query", default="Python")
     p_mine.add_argument("--all-levels", action="store_true")
 
+    # tailor
+    p_tailor = subparsers.add_parser("tailor", help="Gerar versão sob medida do currículo (CV Tailoring Engine)")
+    p_tailor.add_argument("--empresa", required=True, help="Nome da empresa")
+    p_tailor.add_argument("--vaga", default="Software Engineer", help="Título do cargo")
+    p_tailor.add_argument("--skills", help="Competências separadas por vírgula (ex: FastAPI, Docker, Redis)")
+    p_tailor.add_argument("--jd", help="Texto ou arquivo de Job Description")
+    p_tailor.add_argument("--lang", choices=["en", "pt"], default="en", help="Idioma do currículo")
+
+    # list
     subparsers.add_parser("list", help="Listar leads no funil")
 
+    # show
     p_show = subparsers.add_parser("show", help="Ver detalhes e mensagem de um lead")
     p_show.add_argument("id", type=int)
 
+    # send
     p_send = subparsers.add_parser("send", help="Enviar e-mail diretamente via SMTP com PDF anexado")
     p_send.add_argument("id", type=int)
 
+    # gmail
     p_gmail = subparsers.add_parser("gmail", help="Abrir Gmail Web com e-mail preenchido")
     p_gmail.add_argument("id", type=int)
 
+    # draft
     p_draft = subparsers.add_parser("draft", help="Gerar rascunho .eml com PDF")
     p_draft.add_argument("id", type=int)
 
+    # followups
     subparsers.add_parser("followups", help="Ver alertas de follow-up (D+5)")
 
+    # update
     p_update = subparsers.add_parser("update", help="Atualizar status de um lead no funil")
     p_update.add_argument("id", type=int)
     p_update.add_argument("status", choices=["minerado", "conexao_enviada", "mensagem_enviada", "aguardando_followup", "resposta", "entrevista", "descartada"])
@@ -571,6 +706,12 @@ def main():
 
     if args.command == "mine":
         cmd_mine(args)
+    elif args.command == "tailor":
+        jd_text = args.jd or ""
+        if args.jd and os.path.exists(args.jd):
+            with open(args.jd, "r", encoding="utf-8") as f:
+                jd_text = f.read()
+        tailor_cv(empresa=args.empresa, vaga=args.vaga, skills=args.skills, jd_text=jd_text, lang=args.lang)
     elif args.command == "list":
         cmd_list(args)
     elif args.command == "show":
