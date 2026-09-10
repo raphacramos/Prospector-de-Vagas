@@ -76,15 +76,21 @@ python3 prospector.py mine --source greenhouse
 
 ---
 
-### 2. Motor de Customização de Currículo (CV Tailoring)
+### 2. Motor de Calibração de Currículo (CV Tailoring & ATS Scoring)
 
-Gera uma versão do currículo calibrada com as competências exatas da vaga:
+Inspirado no algoritmo do **Resume-Matcher**, o motor analisa a descrição da vaga (Job Description), calcula o **Score de Aderência ATS**, identifica **Keywords Faltantes (Keyword Gap)** e compila automaticamente uma versão em PDF (1 página A4) via Google Chrome headless:
 
 ```bash
-# Customização por palavras-chave
-python3 prospector.py tailor --empresa "Linear" --vaga "Backend Engineer" --skills "FastAPI, PostgreSQL, Concurrency"
+# 🚀 Calibração automática direto do ID da vaga (extrai JD oficial de Ashby, Greenhouse e Lever)
+python3 prospector.py tailor --lead 452
 
-# Customização a partir de um arquivo de Job Description
+# Calibração via URL direta da vaga
+python3 prospector.py tailor --url https://boards.greenhouse.io/spacex/jobs/8696097002
+
+# Customização cirúrgica por competências
+python3 prospector.py tailor --empresa "Linear" --vaga "Backend Engineer" --skills "FastAPI, PostgreSQL, Concurrency, Redis"
+
+# Customização a partir de um arquivo local de Job Description
 python3 prospector.py tailor --empresa "Cloudflare" --jd vaga_cloudflare.txt
 ```
 

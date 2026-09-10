@@ -5,6 +5,7 @@ import ssl
 import subprocess
 import tempfile
 import os
+import time
 import urllib.request
 
 def clean_html(text):
@@ -41,22 +42,46 @@ def fetch_text(url, headers=None, timeout=15):
             pass
         return None
 
-def compile_html_to_pdf(html_path, pdf_path, timeout=30):
-    """Compila arquivo HTML para PDF via Google Chrome headless."""
+def compile_html_to_pdf(html_path, pdf_path, timeout=20):
+    """Compila arquivo HTML para PDF via Google Chrome headless de alta performance."""
     user_dir = tempfile.mkdtemp()
+    if os.path.exists(pdf_path):
+        try:
+            os.remove(pdf_path)
+        except Exception:
+            pass
     cmd = [
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
         "--headless",
         "--disable-gpu",
+        "--disable-background-networking",
+        "--disable-extensions",
+        "--disable-sync",
+        "--no-first-run",
+        "--no-default-browser-check",
         "--no-pdf-header-footer",
         f"--user-data-dir={user_dir}",
         f"--print-to-pdf={pdf_path}",
         f"file://{html_path}"
     ]
-    try:
-        subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    success = False
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        time.sleep(0.4)
+        if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 10000:
+            time.sleep(0.4)
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except Exception:
+                proc.kill()
+            subprocess.run(["rm", "-rf", user_dir])
+            success = True
+            break
+
+    if not success:
+        proc.kill()
         subprocess.run(["rm", "-rf", user_dir])
-        return os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0
-    except Exception:
-        subprocess.run(["rm", "-rf", user_dir])
-        return False
+
+    return success and os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0

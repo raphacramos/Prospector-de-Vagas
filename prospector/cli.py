@@ -147,11 +147,13 @@ def main():
     p_mine.add_argument("--all-ats", action="store_true", help="Desativar filtro restritivo de ATS rápido")
 
     # tailor
-    p_tailor = subparsers.add_parser("tailor", help="Gerar versão sob medida do currículo (CV Tailoring Engine)")
-    p_tailor.add_argument("--empresa", required=True, help="Nome da empresa")
+    p_tailor = subparsers.add_parser("tailor", help="Calibrar currículo com ATS Match Score & Keyword Gap (Resume-Matcher)")
+    p_tailor.add_argument("--lead", type=int, help="ID do lead no banco prospector.db para calibrar automaticamente")
+    p_tailor.add_argument("--empresa", help="Nome da empresa")
     p_tailor.add_argument("--vaga", default="Software Engineer", help="Título do cargo")
+    p_tailor.add_argument("--url", help="URL direta da vaga para extração automática da JD")
     p_tailor.add_argument("--skills", help="Competências separadas por vírgula (ex: FastAPI, Docker, Redis)")
-    p_tailor.add_argument("--jd", help="Texto ou arquivo de Job Description")
+    p_tailor.add_argument("--jd", help="Texto ou caminho do arquivo de Job Description")
     p_tailor.add_argument("--lang", choices=["en", "pt"], default="en", help="Idioma do currículo")
 
     # list
@@ -190,7 +192,15 @@ def main():
         if args.jd and os.path.exists(args.jd):
             with open(args.jd, "r", encoding="utf-8") as f:
                 jd_text = f.read()
-        tailor_cv(empresa=args.empresa, vaga=args.vaga, skills=args.skills, jd_text=jd_text, lang=args.lang)
+        tailor_cv(
+            empresa=args.empresa, 
+            vaga=args.vaga, 
+            lead_id=args.lead, 
+            url=args.url, 
+            skills=args.skills, 
+            jd_text=jd_text, 
+            lang=args.lang
+        )
     elif args.command == "list":
         cmd_list(args)
     elif args.command == "show":
