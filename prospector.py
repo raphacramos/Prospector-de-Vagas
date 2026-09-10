@@ -238,7 +238,7 @@ def mine_hacker_news(query="Python", hits=20):
 TEMPLATES = {
     "1": {
         "name": "Modelo 1: Tech Lead / EM (Nacional - Backend & BINGO)",
-        "subject": "Aplicação Engenharia Backend - Raphael Ramos",
+        "subject": "Aplicação Engenharia Backend - {empresa} - Raphael Ramos",
         "template": (
             "Olá {nome},\n\n"
             "Acompanho a evolução técnica da {empresa} e vi a movimentação no time de engenharia.\n"
@@ -252,7 +252,7 @@ TEMPLATES = {
     },
     "2": {
         "name": "Modelo 2: CTO / Engineering Lead (Internacional Remoto - English)",
-        "subject": "Software Engineer Application - Raphael Ramos",
+        "subject": "Software Engineer Application - {empresa} - Raphael Ramos",
         "template": (
             "Hi {nome},\n\n"
             "I follow {empresa}'s work and your focus on scaling backend services.\n"
