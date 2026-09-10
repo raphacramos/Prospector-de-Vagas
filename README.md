@@ -38,7 +38,8 @@ Prospector-de-Vagas/
 │   │   ├── base.py             # Expressões regulares, filtros anti-Gupy e extratores
 │   │   ├── github.py           # Scraper da API do GitHub (backend-br, datascience-br)
 │   │   ├── hacker_news.py      # Parser Algolia da thread mensal Ask HN: Who is hiring
-│   │   └── greenhouse.py       # Consumo das APIs públicas do Greenhouse para startups
+│   │   ├── greenhouse.py       # Consumo das APIs públicas do Greenhouse para startups
+│   │   └── simplify.py         # Parser algorítmico do SimplifyJobs (New Grad & Fast ATS)
 │   └── engine/
 │       ├── copywriter.py       # Motor de mensagens de abordagem (< 400 chars) em PT/EN
 │       ├── tailor.py           # Motor de customização dinâmica de currículo (CV Tailoring)
@@ -54,8 +55,14 @@ O projeto utiliza **apenas a biblioteca padrão do Python (3.8+)**, sem dependê
 ### 1. Mineração de Oportunidades
 
 ```bash
-# Mineração completa (GitHub + Hacker News + Greenhouse)
+# Mineração completa (GitHub + Hacker News + Greenhouse + SimplifyJobs)
 python3 prospector.py mine
+
+# Minerar SimplifyJobs (Vagas ativas New Grad / Associate em Fast-ATS: Ashby, Greenhouse, Lever)
+python3 prospector.py mine --source simplify
+
+# Minerar SimplifyJobs apenas vagas com trabalho Remoto / Global / LATAM
+python3 prospector.py mine --source simplify --remote-only
 
 # Minerar apenas GitHub (Mercado Brasileiro)
 python3 prospector.py mine --source github

@@ -15,19 +15,28 @@ def clean_html(text):
     return re.sub(r"\s+", " ", text).strip()
 
 def fetch_json(url, headers=None, timeout=10):
+    text = fetch_text(url, headers=headers, timeout=timeout)
+    if text:
+        try:
+            return json.loads(text)
+        except Exception:
+            return None
+    return None
+
+def fetch_text(url, headers=None, timeout=15):
     if headers is None:
         headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
     req = urllib.request.Request(url, headers=headers)
     ctx = ssl._create_unverified_context()
     try:
         with urllib.request.urlopen(req, context=ctx, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            return resp.read().decode("utf-8")
     except Exception:
         try:
-            cmd = ["curl", "-s", "-H", f"User-Agent: {headers.get('User-Agent', '')}", url]
+            cmd = ["curl", "-s", "-L", "-H", f"User-Agent: {headers.get('User-Agent', '')}", url]
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
             if res.returncode == 0 and res.stdout.strip():
-                return json.loads(res.stdout)
+                return res.stdout
         except Exception:
             pass
         return None

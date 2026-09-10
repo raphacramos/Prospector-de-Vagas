@@ -10,6 +10,7 @@ from prospector.core.db import (
 from prospector.miners.github import mine_github
 from prospector.miners.hacker_news import mine_hacker_news
 from prospector.miners.greenhouse import mine_greenhouse
+from prospector.miners.simplify import mine_simplify
 from prospector.engine.copywriter import get_message_content
 from prospector.engine.tailor import tailor_cv
 from prospector.engine.mailer import send_smtp, open_gmail_web, create_eml_draft
@@ -20,9 +21,15 @@ def cmd_mine(args):
     if args.source in ["all", "github"]:
         all_leads.extend(mine_github(junior_only=not args.all_levels))
     if args.source in ["all", "hn"]:
-        all_leads.extend(mine_hacker_news(query=args.query))
+        all_leads.extend(mine_hacker_news(query=args.query or "Python"))
     if args.source in ["all", "greenhouse"]:
-        all_leads.extend(mine_greenhouse(query=args.query))
+        all_leads.extend(mine_greenhouse(query=args.query or "Python"))
+    if args.source in ["all", "simplify"]:
+        all_leads.extend(mine_simplify(
+            query=args.query, 
+            remote_only=getattr(args, "remote_only", False), 
+            fast_ats_only=not getattr(args, "all_ats", False)
+        ))
 
     print(f"\n{Color.BOLD}✨ Total minerado: {len(all_leads)} vagas qualificadas.{Color.RESET}\n")
     for idx, lead in enumerate(all_leads, 1):
@@ -58,7 +65,7 @@ def cmd_show(args):
         print(f"{Color.RED}Lead #{args.id} não encontrado.{Color.RESET}")
         return
     lid, comp, title, src, url, contact, raw_body, status = lead
-    is_intl = "hacker news" in src.lower() or "international" in src.lower() or "greenhouse" in src.lower()
+    is_intl = any(k in src.lower() for k in ["hacker news", "international", "greenhouse", "simplify"])
     model = "2" if is_intl else "1"
     subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
 
@@ -132,10 +139,12 @@ def main():
     subparsers = parser.add_subparsers(dest="command")
 
     # mine
-    p_mine = subparsers.add_parser("mine", help="Minerar vagas (GitHub, Hacker News, Greenhouse)")
-    p_mine.add_argument("--source", choices=["all", "github", "hn", "greenhouse"], default="all")
-    p_mine.add_argument("--query", default="Python")
-    p_mine.add_argument("--all-levels", action="store_true")
+    p_mine = subparsers.add_parser("mine", help="Minerar vagas (GitHub, Hacker News, Greenhouse, SimplifyJobs)")
+    p_mine.add_argument("--source", choices=["all", "github", "hn", "greenhouse", "simplify"], default="all")
+    p_mine.add_argument("--query", default=None, help="Termo de busca/filtro (ex: Python, Backend, Remote)")
+    p_mine.add_argument("--all-levels", action="store_true", help="Incluir níveis acima de Júnior/Entry-Level no GitHub")
+    p_mine.add_argument("--remote-only", action="store_true", help="Filtrar apenas vagas remotas/LATAM/globais")
+    p_mine.add_argument("--all-ats", action="store_true", help="Desativar filtro restritivo de ATS rápido")
 
     # tailor
     p_tailor = subparsers.add_parser("tailor", help="Gerar versão sob medida do currículo (CV Tailoring Engine)")
