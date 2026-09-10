@@ -13,6 +13,7 @@ import argparse
 import ssl
 import html
 import subprocess
+import smtplib
 from datetime import datetime, timedelta
 import urllib.request
 import urllib.parse
@@ -24,6 +25,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "prospector.db")
 PDF_EN = os.path.join(BASE_DIR, "Curriculo_Raphael_Ramos_EN.pdf")
 PDF_PT = os.path.join(BASE_DIR, "Curriculo_Raphael_Ramos_PT_Destaque.pdf")
+ENV_PATH = os.path.join(BASE_DIR, ".env")
 
 class Color:
     RESET = "\033[0m"
@@ -34,6 +36,16 @@ class Color:
     RED = "\033[91m"
     MAGENTA = "\033[95m"
     DIM = "\033[2m"
+
+def load_env():
+    """Carrega variáveis do arquivo .env se existir."""
+    if os.path.exists(ENV_PATH):
+        with open(ENV_PATH, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, val = line.split("=", 1)
+                    os.environ.setdefault(key.strip(), val.strip().replace('"', '').replace("'", ''))
 
 def clean_html(text):
     if not text:
@@ -276,6 +288,154 @@ def get_message_content(model_key, nome="Hiring Team", empresa="Company", vaga="
 
 # --- COMANDOS CLI ---
 
+def cmd_send(args):
+    """Envia o e-mail diretamente via SMTP do Gmail com o PDF anexado em 1 segundo."""
+    load_env()
+    user = os.environ.get("EMAIL_USER", "raphaelramosc@gmail.com")
+    password = os.environ.get("EMAIL_PASS")
+
+    if not password:
+        print(f"{Color.RED}❌ Erro: Senha de App não encontrada no arquivo .env nem em EMAIL_PASS.{Color.RESET}")
+        print("Configure o arquivo .env com EMAIL_USER e EMAIL_PASS.")
+        return
+
+    init_db()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT id, company, title, source, contact_info FROM leads WHERE id = ?", (args.id,))
+    row = cur.fetchone()
+    if not row:
+        print(f"{Color.RED}Lead #{args.id} não encontrado.{Color.RESET}")
+        return
+    lid, comp, title, src, contact = row
+
+    emails = re.findall(EMAIL_REGEX, contact or "")
+    if not emails:
+        print(f"{Color.RED}❌ Lead #{lid} não possui um endereço de e-mail direto cadastrado.{Color.RESET}")
+        return
+    to_addr = emails[0]
+
+    is_intl = "hacker news" in src.lower()
+    model = "2" if is_intl else "1"
+    subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
+    pdf_path = PDF_EN if is_intl else PDF_PT
+
+    print(f"\n{Color.CYAN}📨 Preparando envio para:{Color.RESET} {to_addr}")
+    print(f"🏢 Empresa: {comp} | Vaga: {title}")
+    print(f"📎 Anexo: {os.path.basename(pdf_path)}")
+    print(f"📝 Assunto: {subj}\n")
+
+    msg = MIMEMultipart()
+    msg["From"] = f"Raphael Ramos <{user}>"
+    msg["To"] = to_addr
+    msg["Subject"] = subj
+    msg.attach(MIMEText(body, "plain", "utf-8"))
+
+    if os.path.exists(pdf_path):
+        with open(pdf_path, "rb") as f:
+            part = MIMEApplication(f.read(), Name=os.path.basename(pdf_path))
+            part["Content-Disposition"] = f'attachment; filename="{os.path.basename(pdf_path)}"'
+            msg.attach(part)
+    else:
+        print(f"{Color.YELLOW}⚠️ Alerta: PDF {pdf_path} não encontrado no diretório.{Color.RESET}")
+
+    try:
+        print(f"{Color.BOLD}🚀 Conectando ao smtp.gmail.com...{Color.RESET}")
+        server = smtplib.SMTP("smtp.gmail.com", 587, timeout=15)
+        server.starttls()
+        server.login(user, password.replace(" ", ""))
+        server.sendmail(user, [to_addr], msg.as_string())
+        server.quit()
+
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("UPDATE leads SET status = 'mensagem_enviada', contacted_at = ? WHERE id = ?", (now_str, lid))
+        conn.commit()
+        print(f"\n{Color.GREEN}{Color.BOLD}✅ E-mail enviado com sucesso para {to_addr}!{Color.RESET}")
+        print(f"{Color.GREEN}Funil atualizado: Lead #{lid} marcado como 'mensagem_enviada' (Follow-up D+5 ativado).{Color.RESET}\n")
+    except Exception as e:
+        print(f"\n{Color.RED}❌ Falha no envio SMTP: {e}{Color.RESET}\n")
+    finally:
+        conn.close()
+
+def cmd_gmail(args):
+    """Abre o Gmail Web no navegador com campos preenchidos."""
+    init_db()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT id, company, title, source, contact_info FROM leads WHERE id = ?", (args.id,))
+    row = cur.fetchone()
+    if not row:
+        print("Lead não encontrado.")
+        return
+    lid, comp, title, src, contact = row
+
+    emails = re.findall(EMAIL_REGEX, contact or "")
+    to_addr = emails[0] if emails else ""
+    is_intl = "hacker news" in src.lower()
+    model = "2" if is_intl else "1"
+    subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
+
+    gmail_url = (
+        "https://mail.google.com/mail/?view=cm&fs=1"
+        f"&to={urllib.parse.quote(to_addr)}"
+        f"&su={urllib.parse.quote(subj)}"
+        f"&body={urllib.parse.quote(body)}"
+    )
+
+    print(f"\n{Color.GREEN}🚀 Abrindo Gmail Web...{Color.RESET}")
+    print(f"Destinatário: {to_addr or 'Preencher manualmente'}")
+    subprocess.run(["open", gmail_url])
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("UPDATE leads SET status = 'mensagem_enviada', contacted_at = ? WHERE id = ?", (now_str, lid))
+    conn.commit()
+    conn.close()
+    print(f"{Color.GREEN}✅ Lead #{lid} atualizado no funil para 'mensagem_enviada'!{Color.RESET}\n")
+
+def cmd_draft(args):
+    """Gera um arquivo .eml com o PDF anexado."""
+    init_db()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT id, company, title, source, contact_info FROM leads WHERE id = ?", (args.id,))
+    row = cur.fetchone()
+    if not row:
+        print("Lead não encontrado.")
+        return
+    lid, comp, title, src, contact = row
+
+    emails = re.findall(EMAIL_REGEX, contact or "")
+    to_addr = emails[0] if emails else ""
+    is_intl = "hacker news" in src.lower()
+    model = "2" if is_intl else "1"
+    subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
+    pdf_path = PDF_EN if is_intl else PDF_PT
+
+    msg = MIMEMultipart()
+    msg["From"] = "Raphael Ramos <raphaelramosc@gmail.com>"
+    msg["To"] = to_addr
+    msg["Subject"] = subj
+    msg.attach(MIMEText(body, "plain", "utf-8"))
+
+    if os.path.exists(pdf_path):
+        with open(pdf_path, "rb") as f:
+            part = MIMEApplication(f.read(), Name=os.path.basename(pdf_path))
+            part["Content-Disposition"] = f'attachment; filename="{os.path.basename(pdf_path)}"'
+            msg.attach(part)
+
+    eml_file = os.path.join(BASE_DIR, f"draft_lead_{lid}.eml")
+    with open(eml_file, "w", encoding="utf-8") as f:
+        f.write(msg.as_string())
+
+    print(f"\n{Color.GREEN}📄 Rascunho gerado com PDF em: {eml_file}{Color.RESET}")
+    subprocess.run(["open", eml_file])
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("UPDATE leads SET status = 'mensagem_enviada', contacted_at = ? WHERE id = ?", (now_str, lid))
+    conn.commit()
+    conn.close()
+    print(f"{Color.GREEN}✅ Lead #{lid} atualizado para 'mensagem_enviada'!{Color.RESET}\n")
+
 def cmd_mine(args):
     init_db()
     all_leads = []
@@ -327,7 +487,7 @@ def cmd_show(args):
         print("Lead não encontrado.")
         return
     lid, comp, title, src, url, contact, raw_body, status = row
-    is_intl = "hacker news" in src.lower() or "international" in src.lower()
+    is_intl = "hacker news" in src.lower()
     model = "2" if is_intl else "1"
     subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
     print(f"\n{Color.BOLD}=== LEAD #{lid}: {comp} ==={Color.RESET}")
@@ -336,92 +496,8 @@ def cmd_show(args):
     print(f"URL: {url}")
     print(f"\n{Color.CYAN}Assunto:{Color.RESET} {subj}")
     print(f"{Color.DIM}{'-'*65}{Color.RESET}\n{body}\n{Color.DIM}{'-'*65}{Color.RESET}")
-    print(f"Dica: Para abrir no Gmail Web, use: {Color.BOLD}python3 prospector.py gmail {lid}{Color.RESET}")
-    print(f"Dica: Para gerar rascunho com PDF anexado: {Color.BOLD}python3 prospector.py draft {lid}{Color.RESET}\n")
-
-def cmd_gmail(args):
-    """Abre o Gmail Web diretamente no navegador com campos preenchidos."""
-    init_db()
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT id, company, title, source, contact_info FROM leads WHERE id = ?", (args.id,))
-    row = cur.fetchone()
-    if not row:
-        print("Lead não encontrado.")
-        return
-    lid, comp, title, src, contact = row
-    
-    # Extrai primeiro e-mail se houver
-    emails = re.findall(EMAIL_REGEX, contact or "")
-    to_addr = emails[0] if emails else ""
-    is_intl = "hacker news" in src.lower()
-    model = "2" if is_intl else "1"
-    subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
-
-    gmail_url = (
-        "https://mail.google.com/mail/?view=cm&fs=1"
-        f"&to={urllib.parse.quote(to_addr)}"
-        f"&su={urllib.parse.quote(subj)}"
-        f"&body={urllib.parse.quote(body)}"
-    )
-
-    print(f"\n{Color.GREEN}🚀 Abrindo Gmail Web no seu navegador com e-mail preenchido...{Color.RESET}")
-    print(f"Destinatário: {to_addr or 'Preencher manualmente'}")
-    print(f"Anexo recomendado: {PDF_EN if is_intl else PDF_PT}\n")
-
-    subprocess.run(["open", gmail_url])
-
-    # Pergunta se deseja marcar como enviado
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cur.execute("UPDATE leads SET status = 'mensagem_enviada', contacted_at = ? WHERE id = ?", (now_str, lid))
-    conn.commit()
-    conn.close()
-    print(f"{Color.GREEN}✅ Lead #{lid} atualizado no funil para 'mensagem_enviada'! (Follow-up D+5 ativado){Color.RESET}\n")
-
-def cmd_draft(args):
-    """Gera um arquivo .eml com o PDF anexado e abre no aplicativo de e-mail do sistema."""
-    init_db()
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT id, company, title, source, contact_info FROM leads WHERE id = ?", (args.id,))
-    row = cur.fetchone()
-    if not row:
-        print("Lead não encontrado.")
-        return
-    lid, comp, title, src, contact = row
-
-    emails = re.findall(EMAIL_REGEX, contact or "")
-    to_addr = emails[0] if emails else ""
-    is_intl = "hacker news" in src.lower()
-    model = "2" if is_intl else "1"
-    subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
-    pdf_path = PDF_EN if is_intl else PDF_PT
-
-    msg = MIMEMultipart()
-    msg["From"] = "Raphael Ramos <raphaelramosc@gmail.com>"
-    msg["To"] = to_addr
-    msg["Subject"] = subj
-    msg.attach(MIMEText(body, "plain", "utf-8"))
-
-    if os.path.exists(pdf_path):
-        with open(pdf_path, "rb") as f:
-            part = MIMEApplication(f.read(), Name=os.path.basename(pdf_path))
-            part["Content-Disposition"] = f'attachment; filename="{os.path.basename(pdf_path)}"'
-            msg.attach(part)
-
-    eml_file = os.path.join(BASE_DIR, f"draft_lead_{lid}.eml")
-    with open(eml_file, "w", encoding="utf-8") as f:
-        f.write(msg.as_string())
-
-    print(f"\n{Color.GREEN}📄 Rascunho gerado com PDF já anexado em: {eml_file}{Color.RESET}")
-    print(f"Abrindo seu aplicativo de e-mail...\n")
-    subprocess.run(["open", eml_file])
-
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cur.execute("UPDATE leads SET status = 'mensagem_enviada', contacted_at = ? WHERE id = ?", (now_str, lid))
-    conn.commit()
-    conn.close()
-    print(f"{Color.GREEN}✅ Lead #{lid} atualizado para 'mensagem_enviada'!{Color.RESET}\n")
+    print(f"⚡ Disparar agora via SMTP: {Color.BOLD}python3 prospector.py send {lid}{Color.RESET}")
+    print(f"🌐 Abrir no Gmail Web: {Color.BOLD}python3 prospector.py gmail {lid}{Color.RESET}\n")
 
 def cmd_followups(args):
     init_db()
@@ -447,9 +523,9 @@ def cmd_followups(args):
         is_intl = "hacker news" in src.lower()
         print(f"📌 [ID {lid}] {comp} - {title} (Contatado em: {c_date})")
         if is_intl:
-            print("Hi [Name], just following up to see if my background in high-throughput backend pipelines fits your needs at {comp}. Best regards!")
+            print(f"Hi Team, just following up to see if my background in high-throughput backend pipelines fits your needs at {comp}. Best regards!")
         else:
-            print("Olá [Nome], tudo bem? Passando apenas para saber se conseguiu avaliar meu perfil técnico na {comp}. Um abraço!")
+            print(f"Olá, tudo bem? Passando apenas para saber se conseguiram avaliar meu perfil técnico na {comp}. Um abraço!")
         print("-" * 65)
 
 def cmd_status_update(args):
@@ -466,31 +542,27 @@ def main():
     parser = argparse.ArgumentParser(description="Prospector CLI - Mineração Técnica & Funil de Prospecção Ágil")
     subparsers = parser.add_subparsers(dest="command")
 
-    # mine
     p_mine = subparsers.add_parser("mine", help="Minerar vagas")
     p_mine.add_argument("--source", choices=["all", "github", "hn"], default="all")
     p_mine.add_argument("--query", default="Python")
     p_mine.add_argument("--all-levels", action="store_true")
 
-    # list
     subparsers.add_parser("list", help="Listar leads no funil")
 
-    # show
     p_show = subparsers.add_parser("show", help="Ver detalhes e mensagem de um lead")
     p_show.add_argument("id", type=int)
 
-    # gmail
-    p_gmail = subparsers.add_parser("gmail", help="Abrir Gmail Web com e-mail preenchido em 1 clique")
+    p_send = subparsers.add_parser("send", help="Enviar e-mail diretamente via SMTP com PDF anexado")
+    p_send.add_argument("id", type=int)
+
+    p_gmail = subparsers.add_parser("gmail", help="Abrir Gmail Web com e-mail preenchido")
     p_gmail.add_argument("id", type=int)
 
-    # draft
-    p_draft = subparsers.add_parser("draft", help="Gerar rascunho .eml com PDF já anexado")
+    p_draft = subparsers.add_parser("draft", help="Gerar rascunho .eml com PDF")
     p_draft.add_argument("id", type=int)
 
-    # followups
     subparsers.add_parser("followups", help="Ver alertas de follow-up (D+5)")
 
-    # update
     p_update = subparsers.add_parser("update", help="Atualizar status de um lead no funil")
     p_update.add_argument("id", type=int)
     p_update.add_argument("status", choices=["minerado", "conexao_enviada", "mensagem_enviada", "aguardando_followup", "resposta", "entrevista", "descartada"])
@@ -503,6 +575,8 @@ def main():
         cmd_list(args)
     elif args.command == "show":
         cmd_show(args)
+    elif args.command == "send":
+        cmd_send(args)
     elif args.command == "gmail":
         cmd_gmail(args)
     elif args.command == "draft":
