@@ -78,10 +78,21 @@ SCAN_JS = r"""
     const hasValue = type === 'file' ? el.files.length > 0
       : (type === 'radio' || type === 'checkbox') ? !!document.querySelector(`input[name="${CSS.escape(el.name)}"]:checked`)
       : !!(el.value && el.value.trim());
+    // Para radio, "options" sao os rotulos de cada opcao do grupo (usado pra bater com
+    // respostas_padrao); cada opcao ganha seu proprio marcador pra ser marcada depois.
+    let options = el.tagName === 'SELECT' ? Array.from(el.options).map(o => o.text.trim()).slice(0, 30) : [];
+    if (type === 'radio' && el.name) {
+      options = Array.from(document.querySelectorAll(`input[type="radio"][name="${CSS.escape(el.name)}"]`))
+        .filter(radio => visible(radio) && !radio.disabled)
+        .map((radio, idx) => {
+          radio.setAttribute('data-prospector-group', pid);
+          radio.setAttribute('data-prospector-option', String(idx));
+          return labelOf(radio).slice(0, 150);
+        });
+    }
     out.push({
       pid, tag: isCombo ? 'select' : el.tagName.toLowerCase(), type, label: label.slice(0, 300), name: el.name || el.id || '',
-      required, has_value: hasValue,
-      options: el.tagName === 'SELECT' ? Array.from(el.options).map(o => o.text.trim()).slice(0, 30) : [],
+      required, has_value: hasValue, options,
     });
   });
   return out;
@@ -190,8 +201,9 @@ class BrowserSession:
                 self._pw = None
 
 
-def fill_page(page, lead_id, url, values, cover_letter_path, answer_fn, timeout_ms=30000):
-    """Preenche a pagina ja aberta. `answer_fn(list[str]) -> dict[str, str]`."""
+def fill_page(page, lead_id, url, values, cover_letter_path, answer_fn, answers=None, timeout_ms=30000):
+    """Preenche a pagina ja aberta. `answer_fn(list[str]) -> dict[str, str]`.
+    `answers` e o `respostas_padrao` do perfil, usado pra marcar select/radio quando bate exato."""
     report = AutofillReport(lead_id=lead_id, url=url, ats=detect_ats(url))
     page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
     try:
@@ -201,7 +213,7 @@ def fill_page(page, lead_id, url, values, cover_letter_path, answer_fn, timeout_
         return report
     fields = [FormField(**f) for f in page.evaluate(SCAN_JS)]
     by_pid = {f.pid: f for f in fields}
-    plan = plan_fields(fields, values, cover_letter_path)
+    plan = plan_fields(fields, values, cover_letter_path, answers)
 
     if plan.questions:
         try:
@@ -234,6 +246,22 @@ def fill_page(page, lead_id, url, values, cover_letter_path, answer_fn, timeout_
         except Exception as e:
             report.errors.append(f"não anexei '{os.path.basename(path)}': {e.__class__.__name__}")
             plan.manual.append(by_pid[pid])
+    for pid, option_text in plan.choices.items():
+        try:
+            page.locator(f'[data-prospector-id="{pid}"]').select_option(label=option_text, timeout=5000)
+            filled_ids.append(pid)
+            report.filled.append(by_pid[pid].label)
+        except Exception as e:
+            report.errors.append(f"não selecionei '{by_pid[pid].label}': {e.__class__.__name__}")
+            plan.manual.append(by_pid[pid])
+    for pid, idx in plan.radio_picks.items():
+        try:
+            page.locator(f'[data-prospector-group="{pid}"][data-prospector-option="{idx}"]').check(timeout=5000)
+            filled_ids.append(pid)
+            report.filled.append(by_pid[pid].label)
+        except Exception as e:
+            report.errors.append(f"não marquei '{by_pid[pid].label}': {e.__class__.__name__}")
+            plan.manual.append(by_pid[pid])
 
     manual_ids = [f.pid for f in plan.manual]
     report.manual = [f.label or f.name for f in plan.manual]
@@ -249,9 +277,9 @@ class AutofillWorker:
         self._jobs = queue.Queue()
         self._thread = None
 
-    def submit(self, lead_id, url, values, cover_letter_path, answer_fn):
+    def submit(self, lead_id, url, values, cover_letter_path, answer_fn, answers=None):
         fut = Future()
-        self._jobs.put((fut, lead_id, url, values, cover_letter_path, answer_fn))
+        self._jobs.put((fut, lead_id, url, values, cover_letter_path, answer_fn, answers))
         if self._thread is None or not self._thread.is_alive():
             self._thread = threading.Thread(target=self._run, name="autofill", daemon=True)
             self._thread.start()
@@ -259,7 +287,7 @@ class AutofillWorker:
 
     def _run(self):
         while True:
-            fut, lead_id, url, values, cl_path, answer_fn = self._jobs.get()
+            fut, lead_id, url, values, cl_path, answer_fn, answers = self._jobs.get()
             if fut is None:
                 try:
                     self.session.close()  # o Playwright precisa ser encerrado na mesma thread
@@ -272,13 +300,13 @@ class AutofillWorker:
                 target = application_url(url)
                 page.goto(target, wait_until="domcontentloaded", timeout=45000)
                 page.bring_to_front()
-                fut.set_result(fill_page(page, lead_id, target, values, cl_path, answer_fn))
+                fut.set_result(fill_page(page, lead_id, target, values, cl_path, answer_fn, answers))
             except Exception as e:
                 fut.set_exception(e)
 
     def stop(self, wait=False):
         if self._thread is None or not self._thread.is_alive():
             return
-        self._jobs.put((None,) * 6)
+        self._jobs.put((None,) * 7)
         if wait:
             self._thread.join(timeout=15)

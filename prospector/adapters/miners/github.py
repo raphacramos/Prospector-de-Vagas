@@ -40,18 +40,49 @@ def is_unfilled_template(title, body):
     return sum(s in body_lower for s in TEMPLATE_SENTENCES) >= 2
 
 
+_COMPANY_SEPARATORS = re.compile(r"\s[-–—|]\s")
+_COMPANY_PREFIX = re.compile(r"\s(?:na|no|@|at)\s+", re.IGNORECASE)
+# Termos que so aparecem em prosa sobre a equipe/area, nunca no nome de uma empresa real
+# (diferente de conectivos como "of"/"do", que aparecem em nomes reais: "Bank of America").
+_PROSE_HINTS = re.compile(r"\b(?:squad|time|área|area|setor|departamento|equipe)\b", re.IGNORECASE)
+MAX_COMPANY_WORDS = 6
+
+
+def _clean_company(text):
+    """Remove ruido de local no final ('(Remoto)', '[SP]') sem corromper o nome."""
+    text = re.sub(r"\s*[\(\[][^)\]]*[\)\]]\s*$", "", text)
+    return text.strip(" -|–—").strip()
+
+
+def _looks_like_company(candidate):
+    """Primeira palavra parece nome proprio: maiuscula inicial ('Acme') ou minuscula seguida
+    de maiuscula ('iFood', 'eBay'). Prosa comum ('squad', 'a', 'de') fica de fora."""
+    first = candidate.split()[0] if candidate else ""
+    return bool(first[:1].isupper() or re.match(r"^[a-z]+[A-Z]", first))
+
+
 def parse_title(title):
-    """'[Remoto] Dev Backend na Acme' -> ('Dev Backend na Acme', 'Remoto', 'Acme')."""
+    """'[Remoto] Dev Backend na Acme' -> ('Dev Backend na Acme', 'Remoto', 'Acme').
+
+    Separadores explicitos (-, |, travessao) sao o formato do template e tem prioridade.
+    "na/no/@/at" e so um fallback: usa a ultima ocorrencia (a mais proxima do nome real) e
+    descarta a captura quando parece prosa (minuscula, com conectivos, ou longa demais).
+    """
     brackets = re.findall(r"^\s*\[([^\]]*)\]", title or "")
     location = brackets[0].strip() if brackets else ""
     rest = re.sub(r"^\s*(\[[^\]]*\]\s*)+", "", title or "").strip()
+
     company = ""
-    m = re.search(r"\s(?:na|no|@|at)\s+(.+)$", rest, flags=re.IGNORECASE)
-    if m:
-        company = m.group(1)
-    elif " - " in rest:
-        company = rest.rsplit(" - ", 1)[1]
-    company = re.sub(r"[\[\]()]", "", company).strip(" -|")
+    parts = _COMPANY_SEPARATORS.split(rest)
+    if len(parts) > 1:
+        company = _clean_company(parts[-1])
+    else:
+        seps = list(_COMPANY_PREFIX.finditer(rest))
+        if seps:
+            candidate = _clean_company(rest[seps[-1].end():])
+            if (candidate and len(candidate.split()) <= MAX_COMPANY_WORDS
+                    and _looks_like_company(candidate) and not _PROSE_HINTS.search(candidate)):
+                company = candidate
     return rest, location, company
 
 

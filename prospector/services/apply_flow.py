@@ -26,10 +26,11 @@ class ApplyFlow:
         pkg, values = self.values(lead_id)
         if not pkg.apply_url:
             raise ApplicationError("a vaga não tem link de candidatura")
-        cover_path = os.path.join(pkg.folder, "carta.txt")
+        cover_path = pkg.cover_letter_pdf or os.path.join(pkg.folder, "carta.txt")
         if self.worker is not None:
             fut = self.worker.submit(lead_id, pkg.apply_url, values, cover_path,
-                                     lambda qs: self.app.answer_questions(lead_id, qs))
+                                     lambda qs: self.app.answer_questions(lead_id, qs),
+                                     answers=self.profile.standard_answers)
             return "autofill", fut
         self._open(application_url(pkg.apply_url))
         return "manual", {"url": application_url(pkg.apply_url), "values": values}

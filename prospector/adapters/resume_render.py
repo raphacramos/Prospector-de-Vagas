@@ -39,6 +39,39 @@ def _e(s):
     return escape(s or "")
 
 
+LETTER_CSS = """
+@page { size: A4; margin: 20mm 22mm; }
+body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1b1f23;
+       font-size: 11pt; line-height: 1.5; margin: 0; }
+header { margin-bottom: 14pt; }
+h1 { font-size: 14pt; margin: 0 0 3pt; }
+.heading { font-size: 10pt; color: #5b6670; }
+p { margin: 0 0 10pt; }
+@media screen { body { max-width: 170mm; margin: 0 auto; padding: 20mm; } }
+"""
+
+
+def render_cover_letter_html(text, name="", heading=""):
+    """Carta de apresentacao em HTML simples (A4, uma pagina) para virar PDF."""
+    body = (text or "").strip()
+    # A IA costuma separar paragrafos com linha em branco; se nao tiver, cada quebra de
+    # linha simples ja e um paragrafo (carta corrida sem \n\n nao vira um bloco so).
+    sep = "\n\n" if "\n\n" in body else "\n"
+    paragraphs = "".join(f"<p>{_e(p)}</p>" for p in body.split(sep) if p.strip())
+    out = ["<!doctype html><html lang=\"pt\"><head><meta charset=\"utf-8\">",
+           f"<title>{_e(name)}</title><style>{LETTER_CSS}</style></head><body>"]
+    if name or heading:
+        out.append("<header>")
+        if name:
+            out.append(f"<h1>{_e(name)}</h1>")
+        if heading:
+            out.append(f'<div class="heading">{_e(heading)}</div>')
+        out.append("</header>")
+    out.append(paragraphs or f"<p>{_e(body)}</p>")
+    out.append("</body></html>")
+    return "".join(out)
+
+
 def _dates(start, end):
     return " – ".join(x for x in (start, end) if x)
 

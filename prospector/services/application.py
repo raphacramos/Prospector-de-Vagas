@@ -9,7 +9,7 @@ from typing import List, Optional
 
 from prospector.adapters.llm_anthropic import text_block
 from prospector.adapters.pdf_chrome import PdfRendererUnavailable
-from prospector.adapters.resume_render import render_html
+from prospector.adapters.resume_render import render_cover_letter_html, render_html
 from prospector.domain.lead import LeadStatus
 from prospector.domain.resume import TailoredResume, enforce_faithfulness, resolve, unproven_terms
 from prospector.services.prompts import (
@@ -35,6 +35,7 @@ class ApplicationPackage:
     cv_html: str
     cv_pdf: str = ""
     cover_letter: str = ""
+    cover_letter_pdf: str = ""
     headline: str = ""
     fit_summary: str = ""
     keywords_used: List[str] = field(default_factory=list)
@@ -70,6 +71,33 @@ class ApplicationService:
         self.pdf_renderer = pdf_renderer
         self.base_dir = base_dir
         self._now = clock
+
+    # -------------------------------------------------------------------- carta
+    def _write_cover_letter(self, folder, company, role, text, render_pdf):
+        """Escreve carta.txt e, quando possivel, carta.pdf (varios ATS nao aceitam .txt).
+        Retorna (caminho_do_pdf_ou_vazio, avisos)."""
+        with open(os.path.join(folder, "carta.txt"), "w", encoding="utf-8") as f:
+            f.write((text or "") + "\n")
+        if not (text or "").strip():
+            # carta esvaziada: o pdf/html de uma versao anterior ficaria mentindo sobre o conteudo.
+            for stale in ("carta.html", "carta.pdf"):
+                path = os.path.join(folder, stale)
+                if os.path.exists(path):
+                    os.remove(path)
+            return "", []
+        if not render_pdf:
+            return "", []
+        heading = f"{role} - {company}" if role else company
+        html_path = os.path.join(folder, "carta.html")
+        with open(html_path, "w", encoding="utf-8") as f:
+            f.write(render_cover_letter_html(text, self.profile.nome, heading))
+        pdf_path = os.path.join(folder, "carta.pdf")
+        try:
+            if self.pdf_renderer.render(html_path, pdf_path):
+                return pdf_path, []
+            return "", ["o Chrome não gerou o PDF da carta; use o carta.txt"]
+        except PdfRendererUnavailable as e:
+            return "", [str(e)]
 
     # ----------------------------------------------------------------- pastas
     def folder_for(self, lead):
@@ -151,10 +179,10 @@ class ApplicationService:
             f.write(render_html(resolve(master, tailored)))
         with open(os.path.join(folder, "tailored.json"), "w", encoding="utf-8") as f:
             json.dump(tailored.to_dict(), f, ensure_ascii=False, indent=2)
-        with open(os.path.join(folder, "carta.txt"), "w", encoding="utf-8") as f:
-            f.write(cover + "\n")
         with open(os.path.join(folder, "vaga.txt"), "w", encoding="utf-8") as f:
             f.write(jd + "\n")
+        cover_pdf, cover_warnings = self._write_cover_letter(folder, company, role, cover, render_pdf)
+        warnings += cover_warnings
 
         pdf_path = ""
         if render_pdf:
@@ -171,7 +199,8 @@ class ApplicationService:
         pkg = ApplicationPackage(
             lead_id=lead.id, folder=folder, language=language, company=company, role=role,
             apply_url=self.apply_url(lead), created_at=self._now().strftime("%Y-%m-%d %H:%M:%S"),
-            cv_html=html_path, cv_pdf=pdf_path, cover_letter=cover, headline=tailored.headline,
+            cv_html=html_path, cv_pdf=pdf_path, cover_letter=cover, cover_letter_pdf=cover_pdf,
+            headline=tailored.headline,
             fit_summary=data.get("fit_summary", ""), keywords_used=tailored.keywords_used,
             missing_requirements=list(data.get("missing_requirements", [])), warnings=warnings,
             jd_source=jd_source, model=getattr(self.llm, "model", ""), usage=usage,
@@ -187,8 +216,8 @@ class ApplicationService:
         if not pkg:
             raise ApplicationError(f"lead #{lead_id} ainda não tem candidatura preparada")
         pkg.cover_letter = text.strip()
-        with open(os.path.join(pkg.folder, "carta.txt"), "w", encoding="utf-8") as f:
-            f.write(pkg.cover_letter + "\n")
+        pkg.cover_letter_pdf, _ = self._write_cover_letter(pkg.folder, pkg.company, pkg.role,
+                                                            pkg.cover_letter, render_pdf=True)
         with open(os.path.join(pkg.folder, "meta.json"), "w", encoding="utf-8") as f:
             json.dump(pkg.to_dict(), f, ensure_ascii=False, indent=2)
         return pkg

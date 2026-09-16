@@ -92,12 +92,44 @@ def profile_values(profile, master, package):
 class FillPlan:
     fills: Dict[str, str] = field(default_factory=dict)       # pid -> texto
     files: Dict[str, str] = field(default_factory=dict)       # pid -> caminho
+    choices: Dict[str, str] = field(default_factory=dict)     # pid (select) -> texto da opcao
+    radio_picks: Dict[str, int] = field(default_factory=dict)  # pid (radio) -> indice da opcao marcada
     questions: Dict[str, str] = field(default_factory=dict)   # pid -> rotulo (para a IA)
     manual: List[FormField] = field(default_factory=list)     # voce precisa preencher
 
 
-def plan_fields(fields: List[FormField], values: Dict[str, str], cover_letter_path: str = "") -> FillPlan:
+def match_answer(label, answers):
+    """Acha, em `respostas_padrao`, a resposta cuja pergunta aparece no rotulo do campo."""
+    if not label or not answers:
+        return None
+    low = label.lower()
+    for question, answer in answers.items():
+        if answer and question.lower() in low:
+            return answer
+    return None
+
+
+def match_option(answer, options):
+    """Acha (indice, texto) da opcao cujo texto bate com a resposta. So combina exato ou como
+    palavra/frase inteira dentro da opcao (nunca substring solta: "No" nao pode casar com "Not
+    sure" ou "sponsorship now") para nunca marcar a opcao errada numa pergunta as cegas."""
+    al = (answer or "").strip().lower()
+    if not al:
+        return None
+    for i, opt in enumerate(options):
+        if opt.strip().lower() == al:
+            return i, opt
+    whole = re.compile(r"\b" + re.escape(al) + r"\b")
+    for i, opt in enumerate(options):
+        if whole.search(opt.strip().lower()):
+            return i, opt
+    return None
+
+
+def plan_fields(fields: List[FormField], values: Dict[str, str], cover_letter_path: str = "",
+                answers: Optional[Dict[str, str]] = None) -> FillPlan:
     plan = FillPlan()
+    answers = answers or {}
     used = set()
     # "Name"/"Nome" ao lado de um campo de sobrenome e o primeiro nome
     has_last_name = any(classify(f) == "last_name" for f in fields)
@@ -125,6 +157,13 @@ def plan_fields(fields: List[FormField], values: Dict[str, str], cover_letter_pa
         if key and f.tag in ("input", "textarea") and f.type in TEXT_TYPES and values.get(key):
             plan.fills[f.pid] = values[key]
             continue
+        if (f.tag == "select" or f.type == "radio") and f.options:
+            answer = match_answer(f.label, answers)
+            hit = match_option(answer, f.options) if answer else None
+            if hit:
+                target = plan.choices if f.tag == "select" else plan.radio_picks
+                target[f.pid] = hit[1] if f.tag == "select" else hit[0]
+                continue
         if f.tag == "select" or f.type in ("checkbox", "radio", "file"):
             if f.required:
                 plan.manual.append(f)

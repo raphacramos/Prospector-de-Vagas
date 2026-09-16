@@ -19,7 +19,7 @@ from prospector.services.funnel import funnel_stats
 from prospector.services.ranking import match_score, queue_key
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-ALLOWED_FILES = {"cv.pdf", "cv.html", "carta.txt", "vaga.txt"}
+ALLOWED_FILES = {"cv.pdf", "cv.html", "carta.txt", "carta.pdf", "vaga.txt"}
 KNOWN_ERRORS = (ApplicationError, LlmError, ValueError)
 
 

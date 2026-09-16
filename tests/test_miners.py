@@ -69,6 +69,36 @@ class GithubMinerTest(unittest.TestCase):
                          ("Back-end developer Cobol TED - Evertec", "Híbrido - SP", "Evertec"))
         self.assertEqual(parse_title("[Hiring] Senior Engineer")[2], "")
 
+    def test_parse_title_separador_pipe(self):
+        self.assertEqual(parse_title("[Remoto] Backend Engineer | Empresa Y")[2], "Empresa Y")
+
+    def test_parse_title_remove_ruido_no_final(self):
+        # "(Remoto)" e um marcador de local, nao faz parte do nome da empresa.
+        self.assertEqual(parse_title("Backend Engineer - Empresa Z (Remoto)")[2], "Empresa Z")
+
+    def test_parse_title_prefere_separador_a_prosa_com_na(self):
+        # "na" aparece antes do separador; o separador (mais confiavel) deve ganhar.
+        self.assertEqual(parse_title("Atuando na squad de pagamentos - PagCorp")[2], "PagCorp")
+
+    def test_parse_title_usa_ultima_ocorrencia_de_na(self):
+        self.assertEqual(parse_title("Vaga para atuar na área de dados na DataCo")[2], "DataCo")
+
+    def test_parse_title_prosa_longa_apos_na_nao_vira_empresa(self):
+        self.assertEqual(
+            parse_title("Trabalhar na squad de pagamentos processando cobranças mensais")[2], "")
+
+    def test_parse_title_minuscula_apos_na_nao_vira_empresa(self):
+        self.assertEqual(parse_title("Desenvolvedor Backend no time de pagamentos")[2], "")
+
+    def test_parse_title_nomes_com_camel_case(self):
+        # iFood, eBay etc: minuscula seguida de maiuscula tambem parece nome de empresa.
+        self.assertEqual(parse_title("Desenvolvedor Backend na iFood")[2], "iFood")
+        self.assertEqual(parse_title("Desenvolvedor Backend na eBay")[2], "eBay")
+
+    def test_parse_title_empresa_com_conectivo_no_nome(self):
+        # "of"/"do" tambem aparecem em nomes reais de empresa; nao pode ser motivo de rejeitar.
+        self.assertEqual(parse_title("Vaga para atuar no Bank of America")[2], "Bank of America")
+
     def test_is_backend_role(self):
         self.assertFalse(is_backend_role("Vendedor com english fluente"))
         self.assertTrue(is_backend_role("Engenheira de Dados Jr - Python"))

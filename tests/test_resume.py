@@ -10,7 +10,7 @@ import zipfile
 
 from prospector.adapters.llm_anthropic import AnthropicClient, validate_schema
 from prospector.adapters.resume_files import ResumeFileError, content_blocks, docx_text
-from prospector.adapters.resume_render import render_html
+from prospector.adapters.resume_render import render_cover_letter_html, render_html
 from prospector.domain.resume import (
     MasterResume, ResumeError, TailoredResume, assign_ids, enforce_faithfulness, resolve, untailored,
 )
@@ -91,6 +91,16 @@ class FaithfulnessTest(unittest.TestCase):
         self.assertIn("<h2>Experience</h2>", html)
         self.assertNotIn("Otimizei algoritmos", html)  # bullet nao escolhido fica fora
         self.assertIn("Projeto BINGO", html)
+
+    def test_render_cover_letter_quebra_paragrafos_com_ou_sem_linha_em_branco(self):
+        html = render_cover_letter_html("Prezados,\n\nGostaria de me candidatar.\n\nAtt, Raphael",
+                                        "Raphael Ramos", "Backend Engineer - Acme")
+        self.assertEqual(html.count("<p>"), 3)
+        self.assertIn("<h1>Raphael Ramos</h1>", html)
+        self.assertIn("Backend Engineer - Acme", html)
+        # sem linha em branco: cada quebra simples ainda vira paragrafo, carta nao vira um bloco so
+        html2 = render_cover_letter_html("Prezados,\nGostaria de me candidatar.\nAtt, Raphael")
+        self.assertEqual(html2.count("<p>"), 3)
 
     def test_traducao_de_cargos_datas_e_idiomas(self):
         t = enforce_faithfulness(master(), self.tailored())

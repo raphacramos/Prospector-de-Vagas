@@ -128,8 +128,24 @@ class PrepareTest(Base):
         tailored = read_json(os.path.join(pkg.folder, "tailored.json"))
         self.assertEqual(len(tailored["experiences"][0]["bullets"]), 1)
         self.assertEqual(pkg.cv_pdf, "")
+        self.assertEqual(pkg.cover_letter_pdf, "")
         self.assertTrue(any("PDF" in w for w in pkg.warnings))
         self.assertIn(" 1 ", self.llm.calls[0]["system"])
+
+    def test_carta_esvaziada_remove_pdf_antigo(self):
+        svc = self.service()
+        pkg = svc.prepare(self.intl_id)
+        self.assertTrue(os.path.exists(pkg.cover_letter_pdf))
+        pkg = svc.update_cover_letter(self.intl_id, "   ")
+        self.assertEqual(pkg.cover_letter_pdf, "")
+        self.assertFalse(os.path.exists(os.path.join(pkg.folder, "carta.pdf")))
+        self.assertFalse(os.path.exists(os.path.join(pkg.folder, "carta.html")))
+
+    def test_carta_em_pdf(self):
+        pkg = self.service().prepare(self.intl_id)
+        self.assertTrue(pkg.cover_letter_pdf.endswith("carta.pdf"))
+        self.assertTrue(os.path.exists(os.path.join(pkg.folder, "carta.html")))
+        self.assertTrue(os.path.exists(pkg.cover_letter_pdf))
 
     def test_jd_curta_avisa(self):
         self.jd.texts = {}
@@ -146,8 +162,9 @@ class PrepareTest(Base):
     def test_carta_editada(self):
         svc = self.service()
         svc.prepare(self.intl_id)
-        svc.update_cover_letter(self.intl_id, "  Nova carta ")
+        pkg = svc.update_cover_letter(self.intl_id, "  Nova carta ")
         self.assertEqual(svc.load(self.intl_id).cover_letter, "Nova carta")
+        self.assertTrue(pkg.cover_letter_pdf.endswith("carta.pdf"))
 
     def test_respostas_so_confiaveis(self):
         svc = self.service()
@@ -241,6 +258,46 @@ class FieldPlanTest(unittest.TestCase):
         self.assertEqual(plan.questions, {"b": "Have you ever worked at your current company before?"})
         self.assertEqual([f.pid for f in plan.manual], ["a"])
 
+    def test_select_e_radio_preenchidos_pelas_respostas_padrao(self):
+        fields = [
+            field("s", "Are you legally authorized to work in the US?*", tag="select", type="select-one",
+                  required=True, options=["", "Yes", "No"]),
+            field("r", "Do you require visa sponsorship?", type="radio", options=["Yes", "No"]),
+        ]
+        answers = {"authorized to work": "Yes", "visa sponsorship": "No"}
+        plan = plan_fields(fields, self.VALUES, answers=answers)
+        self.assertEqual(plan.choices, {"s": "Yes"})
+        self.assertEqual(plan.radio_picks, {"r": 1})
+        self.assertEqual(plan.manual, [])
+
+    def test_select_sem_resposta_correspondente_fica_manual(self):
+        fields = [field("s", "Are you legally authorized to work in the US?*", tag="select", type="select-one",
+                        required=True, options=["", "Yes", "No"])]
+        plan = plan_fields(fields, self.VALUES, answers={"outra pergunta": "Yes"})
+        self.assertEqual(plan.choices, {})
+        self.assertEqual([f.pid for f in plan.manual], ["s"])
+
+    def test_resposta_sem_opcao_correspondente_fica_manual(self):
+        fields = [field("s", "How did you hear about us?", tag="select", required=True,
+                        options=["LinkedIn", "Referral"])]
+        plan = plan_fields(fields, self.VALUES, answers={"como soube da vaga": "Company careers page"})
+        self.assertEqual(plan.choices, {})
+        self.assertEqual([f.pid for f in plan.manual], ["s"])
+
+    def test_resposta_curta_nao_casa_por_substring_solta(self):
+        # "No" nao pode "vazar" pra dentro de "now"/"not": marcar a opcao errada numa
+        # pergunta sensivel (patrocinio de visto) e pior do que deixar manual.
+        from prospector.adapters.autofill.fields import match_option
+        self.assertIsNone(match_option("No", ["I require sponsorship now", "I do not require sponsorship"]))
+        self.assertEqual(match_option("No", ["Yes", "No"]), (1, "No"))
+        self.assertEqual(match_option("Company careers page", ["LinkedIn", "Company careers page"]), (1, "Company careers page"))
+
+    def test_select_nao_obrigatorio_sem_resposta_e_ignorado(self):
+        fields = [field("s", "Pronouns", tag="select", options=["He", "She", "They"])]
+        plan = plan_fields(fields, self.VALUES, answers={})
+        self.assertEqual(plan.choices, {})
+        self.assertEqual(plan.manual, [])
+
     def test_urls(self):
         self.assertEqual(application_url("https://jobs.lever.co/acme/abc"), "https://jobs.lever.co/acme/abc/apply")
         self.assertEqual(application_url("https://jobs.lever.co/acme/abc/apply"), "https://jobs.lever.co/acme/abc/apply")
@@ -253,8 +310,8 @@ class FakeWorker:
     def __init__(self):
         self.jobs = []
 
-    def submit(self, lead_id, url, values, cover_path, answer_fn):
-        self.jobs.append((lead_id, url, values, cover_path, answer_fn))
+    def submit(self, lead_id, url, values, cover_path, answer_fn, answers=None):
+        self.jobs.append((lead_id, url, values, cover_path, answer_fn, answers))
         return "future"
 
 
@@ -267,11 +324,12 @@ class ApplyFlowTest(Base):
         worker = FakeWorker()
         mode, fut = ApplyFlow(app, self.profile, self.store, worker=worker).start(self.intl_id)
         self.assertEqual((mode, fut), ("autofill", "future"))
-        lead_id, url, values, cover, answer_fn = worker.jobs[0]
+        lead_id, url, values, cover, answer_fn, answers = worker.jobs[0]
+        self.assertEqual(answers, self.profile.standard_answers)
         self.assertEqual(values["first_name"], "Raphael")
         self.assertEqual(values["phone"], "+55 83 90000-0000")  # do CV-mestre, perfil sem telefone
         self.assertTrue(values["resume"].endswith(".pdf"))
-        self.assertTrue(cover.endswith("carta.txt"))
+        self.assertTrue(cover.endswith("carta.pdf"))  # PDF preferido ao .txt quando disponivel
         self.assertEqual(answer_fn(["Why Acme?"]), {"Why Acme?": "Because of pipelines."})
 
         opened = []

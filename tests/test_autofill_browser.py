@@ -106,6 +106,15 @@ class BrowserAutofillTest(unittest.TestCase):
         self.assertIn("Do you require visa sponsorship?✱", rep.manual)
         self.assertEqual(page.input_value("textarea[name=comments]"), "")  # sem resposta confiavel: fica vazio
 
+    def test_lever_radio_marcado_pelas_respostas_padrao(self):
+        page = self.open("lever.html")
+        rep = fill_page(page, 2, page.url, self.values, self.letter, lambda qs: {},
+                        answers={"visa sponsorship": "No"})
+        self.assertTrue(page.is_checked('input[name="cards[a][field1]"][value="No"]'))
+        self.assertFalse(page.is_checked('input[name="cards[a][field1]"][value="Yes"]'))
+        self.assertIn("Do you require visa sponsorship?✱", rep.filled)
+        self.assertNotIn("Do you require visa sponsorship?✱", rep.manual)
+
     def test_ashby_renderizado_depois(self):
         page = self.open("ashby.html")
         rep = fill_page(page, 3, page.url, self.values, self.letter, lambda qs: {})

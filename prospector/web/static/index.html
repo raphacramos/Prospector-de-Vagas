@@ -351,7 +351,9 @@ function renderDetail() {
       </section>
       <section class="card"><h2>Carta de apresentação</h2>
         <textarea class="letter" id="letter" aria-label="Carta de apresentação">${esc(p.cover_letter)}</textarea>
-        <div class="actions"><button class="btn" id="act-letter" type="button">Salvar carta</button><span class="hint">Usada em campos de carta e respostas.</span></div>
+        <div class="actions"><button class="btn" id="act-letter" type="button">Salvar carta</button>
+          ${p.cover_letter_pdf ? `<a class="btn ghost" href="${fileUrl(d.id, "carta.pdf")}" target="_blank" rel="noopener">Abrir PDF</a>` : ""}
+          <span class="hint">Usada em campos de carta e respostas.</span></div>
       </section>
     </div>
     <section class="card"><h2>Currículo adaptado</h2>
