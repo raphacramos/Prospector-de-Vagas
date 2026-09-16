@@ -22,7 +22,7 @@ def ensure_output_dir():
     return OUTPUT_DIR
 
 
-DB_PATH = os.path.join(ROOT_DIR, "prospector.db")
+DB_PATH = os.environ.get("PROSPECTOR_DB") or resolve_asset("prospector.db")  # data/ para instalacoes novas; raiz se ja existir la
 PDF_EN = resolve_asset("Curriculo_Raphael_Ramos_EN.pdf")
 PDF_PT = resolve_asset("Curriculo_Raphael_Ramos_PT_Destaque.pdf")
 HTML_EN = resolve_asset("curriculo_en.html")

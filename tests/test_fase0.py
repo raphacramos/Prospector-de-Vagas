@@ -9,16 +9,20 @@ import unittest
 from unittest import mock
 
 from prospector.core import config
-from prospector.core.region import is_international
+from prospector.domain.lead import Lead, Region, region_from_source
 from prospector.engine import mailer
 from prospector.engine.tailor import extract_canonical_skills
 from prospector.miners import greenhouse
 from prospector.miners.github import is_backend_role
 
 
-def make_lead(source, contact="tech@empresa.com"):
-    # (id, company, title, source, url, contact_info, raw_body, status)
-    return (7, "Acme", "Backend Engineer", source, "https://x", contact, "", "minerado")
+def make_lead(source, email="tech@empresa.com"):
+    return Lead(id=7, company="Acme", title="Backend Engineer", source=source, url="https://x",
+                region=region_from_source(source), emails=[email] if email else [])
+
+
+def is_international(source):
+    return region_from_source(source) is Region.INTL
 
 
 class RegionTest(unittest.TestCase):
@@ -96,35 +100,36 @@ class OutreachTest(unittest.TestCase):
             p = mock.patch.object(config, name, value)
             p.start()
             self.addCleanup(p.stop)
-        self.update_status = mock.patch.object(mailer, "update_status").start()
+        self.repo = mock.Mock()
+        self.update_status = self.repo.set_status
         self.addCleanup(mock.patch.stopall)
         mock.patch("builtins.print").start()
 
     def test_send_aborta_sem_pdf(self):
         with mock.patch.object(mailer.smtplib, "SMTP") as smtp:
-            ok = mailer.send_smtp(make_lead("GitHub (backend-br/vagas)"), "eu@x.com", "senha")
+            ok = mailer.send_smtp(make_lead("GitHub (backend-br/vagas)"), self.repo, "eu@x.com", "senha")
         self.assertFalse(ok)
         smtp.assert_not_called()
         self.update_status.assert_not_called()
 
     def test_send_sem_anexo_explicito_envia(self):
         with mock.patch.object(mailer.smtplib, "SMTP") as smtp:
-            ok = mailer.send_smtp(make_lead("GitHub (backend-br/vagas)"), "eu@x.com", "senha",
+            ok = mailer.send_smtp(make_lead("GitHub (backend-br/vagas)"), self.repo, "eu@x.com", "senha",
                                   allow_no_attachment=True)
         self.assertTrue(ok)
         smtp.return_value.sendmail.assert_called_once()
-        self.update_status.assert_called_once_with(7, "mensagem_enviada")
+        self.assertEqual(self.update_status.call_args[0][:2], (7, "mensagem_enviada"))
 
     def test_draft_nao_marca_como_enviado_e_salva_em_data_out(self):
         with mock.patch.object(mailer.subprocess, "run"):
-            mailer.create_eml_draft(make_lead("Simplify NewGrad (2d)"))
-        self.update_status.assert_called_once_with(7, "rascunho_aberto")
+            mailer.create_eml_draft(make_lead("Simplify NewGrad (2d)"), self.repo)
+        self.assertEqual(self.update_status.call_args[0][:2], (7, "rascunho_aberto"))
         self.assertTrue(os.path.exists(os.path.join(self.tmp.name, "out", "draft_lead_7.eml")))
 
     def test_gmail_nao_marca_como_enviado(self):
         with mock.patch.object(mailer.subprocess, "run"):
-            mailer.open_gmail_web(make_lead("GitHub (backend-br/vagas)"))
-        self.update_status.assert_called_once_with(7, "rascunho_aberto")
+            mailer.open_gmail_web(make_lead("GitHub (backend-br/vagas)"), self.repo)
+        self.assertEqual(self.update_status.call_args[0][:2], (7, "rascunho_aberto"))
 
 
 if __name__ == "__main__":

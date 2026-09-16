@@ -8,7 +8,7 @@ from datetime import datetime
 from prospector.core import config
 from prospector.core.config import Color
 from prospector.core.utils import fetch_text, fetch_json, clean_html, compile_html_to_pdf
-from prospector.core.db import get_lead
+from prospector.core.db import get_repository
 from prospector.engine.copywriter import get_message_content
 
 # Dicionário canônico de competências técnicas (Taxonomia ATS inspirada no Resume-Matcher)
@@ -143,24 +143,27 @@ def compute_cosine_similarity(text1, text2):
         return 0.0
     return (dot_product / (norm1 * norm2)) * 100
 
-def tailor_cv(empresa=None, vaga="Software Engineer", lead_id=None, url=None, skills=None, jd_text="", lang="en"):
+def tailor_cv(empresa=None, vaga="Software Engineer", lead_id=None, url=None, skills=None, jd_text="", lang=None):
     """
     CV Tailoring Engine avançado (inspirado em srbhr/Resume-Matcher).
     Calcula ATS Match Score, Keyword Gap Analysis, customiza headline e competências técnicas,
     e compila o PDF sob medida via Chrome headless.
     """
+    lang_explicit = lang is not None
+    lang = lang or "en"
     init_empresa = empresa or "Empresa"
     init_vaga = vaga or "Software Engineer"
     resolved_url = url or ""
 
     # Se um ID de lead for informado, carrega dados do banco
     if lead_id:
-        lead = get_lead(lead_id)
+        lead = get_repository().get(lead_id)
         if lead:
-            lid, l_comp, l_title, l_src, l_url, l_contact, l_body, l_status = lead
-            init_empresa = l_comp
-            init_vaga = l_title
-            resolved_url = l_url
+            init_empresa = lead.company
+            init_vaga = lead.title
+            resolved_url = lead.url
+            if not lang_explicit:
+                lang = "en" if lead.is_international else "pt"
             print(f"{Color.CYAN}📦 Dados carregados do Lead #{lead_id}: {Color.BOLD}{init_empresa} ({init_vaga}){Color.RESET}")
 
     # Extrai texto da Job Description caso uma URL seja informada
