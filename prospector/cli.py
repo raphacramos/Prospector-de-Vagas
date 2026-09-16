@@ -5,13 +5,16 @@ from prospector.adapters.http import default_client
 from prospector.adapters.jd_fetcher import JobDescriptionFetcher
 from prospector.adapters.miners import build_miners
 from prospector.adapters.pdf_chrome import ChromePdfRenderer
+from prospector.adapters.resume_files import ResumeFileError
 from prospector.adapters.senders import EmlDraftSender, GmailWebSender, SendError, SmtpSender
 from prospector.core import config
 from prospector.core.config import Color, load_env
 from prospector.core.db import get_repository
 from prospector.domain.lead import LeadStatus
-from prospector.ports import MiningOptions
+from prospector.domain.resume import ResumeError
+from prospector.ports import LlmError, MiningOptions
 from prospector.profile import ProfileError, load_profile
+from prospector.services.application import ApplicationError
 from prospector.services.funnel import funnel_stats
 from prospector.services.mining import MiningService
 from prospector.services.outreach import OutreachError, OutreachService
@@ -163,7 +166,11 @@ def cmd_followups(args, repo):
     print(f"\n{Color.RED}{Color.BOLD}⚠️ ALERTA DE FOLLOW-UP (D+5): {len(leads)} contato(s) aguardando recontato!{Color.RESET}\n")
     for l in leads:
         print(f"📌 [ID {l.id}] {l.company} - {l.title} (Contatado em: {l.contacted_at})")
-        print(service.followup_text(l))
+        if l.emails:
+            print(service.followup_text(l))
+        else:
+            print(f"{Color.DIM}Sem e-mail direto: confira o status no portal ({l.ats_links[0] if l.ats_links else l.url}) "
+                  f"ou procure quem recruta na {l.company} no LinkedIn.{Color.RESET}")
         print("-" * 65)
 
 
@@ -241,6 +248,108 @@ def cmd_stats(args, repo):
     print(f"\n{Color.DIM}TAXA = respostas ou entrevistas / leads contatados (por histórico).{Color.RESET}\n")
 
 
+def _container(repo):
+    from prospector.container import Container
+    return Container(repo=repo)
+
+
+def cmd_import_resume(args, repo):
+    c = _container(repo)
+    print(f"{Color.CYAN}📄 Lendo {args.arquivo} com {c.llm.model}...{Color.RESET}")
+    try:
+        resume, backup = c.importer.run(args.arquivo)
+    except (ResumeFileError, ResumeError, LlmError) as e:
+        print(f"{Color.RED}❌ {e}{Color.RESET}")
+        return
+    bullets = sum(len(e.bullets) for e in resume.experiences)
+    print(f"{Color.GREEN}✅ CV-mestre salvo em {c.resume_store.path}{Color.RESET}")
+    print(f"   {resume.contact.name} · {len(resume.experiences)} experiências ({bullets} bullets) · "
+          f"{len(resume.projects)} projetos · {len(resume.education)} formações · {len(resume.skills)} skills")
+    if backup:
+        print(f"   Versão anterior: {backup}")
+    print(f"{Color.YELLOW}Revise o arquivo uma vez: tudo o que a IA usar nas candidaturas sai dele.{Color.RESET}")
+
+
+def _print_package(pkg):
+    print(f"{Color.GREEN}{Color.BOLD}✅ Candidatura preparada: {pkg.company} · {pkg.role}{Color.RESET}")
+    if pkg.fit_summary:
+        print(f"   {pkg.fit_summary}")
+    if pkg.keywords_used:
+        print(f"   Coberto: {', '.join(pkg.keywords_used)}")
+    if pkg.missing_requirements:
+        print(f"   {Color.YELLOW}Lacunas (não inventadas): {', '.join(pkg.missing_requirements)}{Color.RESET}")
+    for w in pkg.warnings:
+        print(f"   {Color.YELLOW}⚠️ {w}{Color.RESET}")
+    print(f"   📁 {pkg.folder}")
+    print(f"   📄 {pkg.cv_pdf or pkg.cv_html}")
+    print(f"   🔗 {pkg.apply_url}")
+
+
+def cmd_prepare(args, repo):
+    c = _container(repo)
+    for lead_id in args.ids:
+        print(f"{Color.CYAN}🎯 Preparando lead #{lead_id}...{Color.RESET}")
+        try:
+            _print_package(c.applications.prepare(lead_id, language=args.lang, render_pdf=not args.sem_pdf))
+        except (ApplicationError, ResumeError, LlmError) as e:
+            print(f"{Color.RED}❌ #{lead_id}: {e}{Color.RESET}")
+
+
+def cmd_apply(args, repo):
+    c = _container(repo)
+    try:
+        mode, payload = c.apply_flow.start(args.id)
+    except (ApplicationError, ResumeError) as e:
+        print(f"{Color.RED}❌ {e}{Color.RESET}")
+        return
+    if mode == "manual":
+        print(f"🌐 Vaga aberta: {payload['url']}")
+        print(f"{Color.YELLOW}Playwright não instalado (pip3 install playwright); copie os dados:{Color.RESET}")
+        for k, v in payload["values"].items():
+            if v and k != "cover_letter":
+                print(f"   {k}: {v}")
+    else:
+        try:
+            rep = payload.result(timeout=240)
+        except Exception as e:
+            print(f"{Color.RED}❌ {e}{Color.RESET}")
+            return
+        print(f"{Color.GREEN}✅ Formulário aberto no Chrome ({rep.ats}).{Color.RESET}")
+        for title, items in (("Preenchido", rep.filled), ("Anexado", rep.uploaded),
+                             ("Respondido pela IA (revise)", rep.answered),
+                             ("Precisa de você", rep.manual), ("Problemas", rep.errors)):
+            if items:
+                print(f"   {title}: " + "; ".join(items))
+        input("\nRevise no Chrome, clique em enviar e aperte Enter aqui para marcar como enviada "
+              "(Ctrl+C para não marcar)... ")
+    c.applications.mark_submitted(args.id)
+    print(f"{Color.GREEN}✅ Lead #{args.id} → candidatura_enviada{Color.RESET}")
+
+
+def cmd_panel(args, repo):
+    import webbrowser
+    from prospector.web.server import serve
+    c = _container(repo)
+    try:
+        app, httpd = serve(c, port=args.porta)
+    except OSError as e:
+        print(f"{Color.RED}❌ Não consegui abrir a porta {args.porta}: {e}. Use --porta.{Color.RESET}")
+        return
+    url = f"http://127.0.0.1:{httpd.server_address[1]}/?token={app.token}"
+    print(f"{Color.GREEN}{Color.BOLD}🖥️ Painel em {url}{Color.RESET}")
+    print(f"{Color.DIM}Só funciona neste computador. Ctrl+C para encerrar.{Color.RESET}")
+    if not args.sem_navegador:
+        webbrowser.open(url)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nPainel encerrado.")
+    finally:
+        httpd.server_close()
+        if c.autofill_worker:
+            c.autofill_worker.stop()
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Prospector CLI - Sistema de Mineração Técnica & Funil Ágil")
     sub = parser.add_subparsers(dest="command")
@@ -291,6 +400,25 @@ def build_parser():
 
     p = sub.add_parser("followups", help="Ver alertas de follow-up (D+5)")
     p.set_defaults(func=cmd_followups)
+
+    p = sub.add_parser("painel", help="Abrir o painel de candidaturas no navegador")
+    p.add_argument("--porta", type=int, default=8765)
+    p.add_argument("--sem-navegador", action="store_true", help="Não abrir o navegador automaticamente")
+    p.set_defaults(func=cmd_panel)
+
+    p = sub.add_parser("importar-cv", help="Criar o CV-mestre (data/resume.json) a partir do seu PDF/DOCX")
+    p.add_argument("arquivo")
+    p.set_defaults(func=cmd_import_resume)
+
+    p = sub.add_parser("preparar", help="Gerar CV adaptado, carta e PDF para uma ou mais vagas")
+    p.add_argument("ids", type=int, nargs="+")
+    p.add_argument("--lang", choices=["en", "pt"], help="Idioma (padrão: região da vaga)")
+    p.add_argument("--sem-pdf", action="store_true")
+    p.set_defaults(func=cmd_prepare)
+
+    p = sub.add_parser("aplicar", help="Abrir o formulário da vaga preenchido (você envia)")
+    p.add_argument("id", type=int)
+    p.set_defaults(func=cmd_apply)
 
     p = sub.add_parser("stats", help="Métricas do funil por fonte (taxa de resposta)")
     p.set_defaults(func=cmd_stats)

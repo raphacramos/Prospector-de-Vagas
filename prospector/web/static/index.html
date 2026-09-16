@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prospector · Candidaturas</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#EFF2EF; --surface:#FFFFFF; --sunk:#E5EAE6; --hover:#F5F8F6;
+  --ink:#15201B; --muted:#5E6A65; --rule:#D2D9D4;
+  --accent:#1D6B57; --accent-ink:#FFFFFF; --accent-soft:#DCEFE8;
+  --good:#1F8A5B; --good-soft:#DDF2E7; --warn:#A95E14; --warn-soft:#F8E8D6; --bad:#AE3434; --bad-soft:#F7DEDE;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --cond:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ground:#0E1412; --surface:#151D1A; --sunk:#1B2521; --hover:#1A2420;
+    --ink:#E1E9E5; --muted:#95A59E; --rule:#2B3833;
+    --accent:#4EC7A3; --accent-ink:#06231B; --accent-soft:#16372E;
+    --good:#55C98E; --good-soft:#15332A; --warn:#E6A15C; --warn-soft:#3A2A18; --bad:#EE8080; --bad-soft:#3B1E1E;
+    color-scheme: dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--ground);color:var(--ink);font:14px/1.5 var(--sans)}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app{display:grid;grid-template-rows:auto auto 1fr;height:100%}
+/* barra superior */
+.top{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--rule);background:var(--surface)}
+.brand{font:600 18px/1 var(--cond);letter-spacing:.01em;display:flex;align-items:baseline;gap:8px}
+.brand small{font:500 11px/1 var(--mono);color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.counters{display:flex;gap:14px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.counters b{color:var(--ink);font-weight:600}
+.spacer{flex:1}
+.btn{border:1px solid var(--rule);background:var(--surface);border-radius:6px;padding:6px 12px;font-weight:500;white-space:nowrap}
+.btn:hover{background:var(--hover)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+kbd{font:500 11px/1 var(--mono);border:1px solid var(--rule);border-bottom-width:2px;border-radius:4px;padding:2px 5px;color:var(--muted);background:var(--surface)}
+/* avisos de configuracao */
+.notices{display:flex;flex-direction:column}
+.notice{display:flex;gap:10px;align-items:baseline;padding:8px 16px;border-bottom:1px solid var(--rule);background:var(--warn-soft);font-size:13px}
+.notice b{color:var(--warn)}
+.notice code{font:12px var(--mono);background:var(--surface);padding:1px 5px;border-radius:3px}
+/* corpo */
+.body{display:grid;grid-template-columns:minmax(300px,400px) 1fr;min-height:0}
+.list{border-right:1px solid var(--rule);display:flex;flex-direction:column;min-height:0;background:var(--surface)}
+.filters{padding:10px 12px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--rule)}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tab{border:0;background:transparent;padding:4px 9px;border-radius:999px;color:var(--muted);font-size:13px}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--surface)}
+.search{width:100%;border:1px solid var(--rule);border-radius:6px;padding:6px 10px;background:var(--ground)}
+.batchbar{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
+.rows{overflow-y:auto;flex:1}
+.row{display:grid;grid-template-columns:20px 1fr auto;gap:10px;padding:10px 12px;border-bottom:1px solid var(--rule);cursor:pointer;align-items:start}
+.row:hover{background:var(--hover)}
+.row[aria-current="true"]{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.row input{margin-top:3px}
+.row .co{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .ti{color:var(--ink);font-size:13px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.row .mt{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.side{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+.score{font:600 12px/1 var(--mono);padding:4px 6px;border-radius:4px;min-width:40px;text-align:center;font-variant-numeric:tabular-nums}
+.s-hi{background:var(--good-soft);color:var(--good)}
+.s-mid{background:var(--warn-soft);color:var(--warn)}
+.s-lo{background:var(--bad-soft);color:var(--bad)}
+.s-na{background:var(--sunk);color:var(--muted)}
+.pill{font:500 11px/1 var(--mono);padding:4px 7px;border-radius:999px;white-space:nowrap;background:var(--sunk);color:var(--muted)}
+.pill.prep{background:var(--accent-soft);color:var(--accent)}
+.pill.sent{background:var(--good-soft);color:var(--good)}
+.pill.pos{background:var(--good);color:var(--surface)}
+.pill.off{text-decoration:line-through}
+.pill.run{background:var(--warn-soft);color:var(--warn)}
+.empty{padding:32px 20px;color:var(--muted);text-align:center}
+/* detalhe */
+.detail{overflow-y:auto;min-height:0}
+.dwrap{max-width:1060px;padding:20px 24px 48px;display:flex;flex-direction:column;gap:18px}
+.dhead{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-start;justify-content:space-between}
+.dhead h1{margin:0;font:600 26px/1.15 var(--cond);text-wrap:balance}
+.dhead .role{font-size:16px;margin-top:4px}
+.meta{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--muted);font-size:13px;margin-top:8px}
+.meta a{color:var(--accent)}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.actions select{border:1px solid var(--rule);border-radius:6px;padding:6px 8px;background:var(--surface)}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.card h2{margin:0;font:600 12px/1 var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{font-size:12px;padding:3px 8px;border-radius:4px;background:var(--sunk)}
+.chip.ok{background:var(--good-soft);color:var(--good)}
+.chip.gap{background:var(--warn-soft);color:var(--warn)}
+.warns{margin:0;padding-left:18px;color:var(--warn);font-size:13px}
+.preview{width:100%;height:760px;border:1px solid var(--rule);border-radius:6px;background:#fff}
+textarea.letter{width:100%;min-height:220px;border:1px solid var(--rule);border-radius:6px;padding:10px 12px;background:var(--ground);line-height:1.55;resize:vertical}
+.hint{color:var(--muted);font-size:12.5px}
+.report ul{margin:4px 0 0;padding-left:18px}
+.report .lbl{font-weight:600;font-size:13px}
+.jd{white-space:pre-wrap;font-size:13px;color:var(--muted);max-height:260px;overflow:auto}
+.timeline{display:flex;flex-wrap:wrap;gap:6px;font-size:12px;color:var(--muted)}
+.placeholder{display:grid;place-items:center;height:100%;color:var(--muted);padding:40px;text-align:center}
+.placeholder div{max-width:440px;display:flex;flex-direction:column;gap:10px}
+.placeholder h2{font:600 22px/1.2 var(--cond);color:var(--ink);margin:0}
+.toast{position:fixed;right:16px;bottom:16px;max-width:420px;padding:10px 14px;border-radius:8px;background:var(--ink);color:var(--surface);box-shadow:0 8px 28px rgba(0,0,0,.25);font-size:13.5px}
+.toast.err{background:var(--bad);color:#fff}
+dialog{border:1px solid var(--rule);border-radius:10px;background:var(--surface);color:var(--ink);padding:18px 20px;max-width:420px;width:calc(100% - 32px)}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog form{display:flex;flex-direction:column;gap:10px}
+dialog label{display:flex;flex-direction:column;gap:4px;font-size:13px}
+dialog input,dialog select{border:1px solid var(--rule);border-radius:6px;padding:6px 8px;background:var(--ground)}
+.check{flex-direction:row!important;align-items:center;gap:8px!important}
+.shortcuts{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);align-items:center}
+@media (max-width: 820px){
+  .body{grid-template-columns:1fr}
+  .list{max-height:45vh;border-right:0;border-bottom:1px solid var(--rule)}
+  .preview{height:520px}
+  .dwrap{padding:16px}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">Prospector <small>candidaturas</small></div>
+    <div class="counters" id="counters"></div>
+    <div class="spacer"></div>
+    <div class="shortcuts" aria-hidden="true"><span><kbd>j</kbd>/<kbd>k</kbd> navegar</span><span><kbd>p</kbd> preparar</span><span><kbd>a</kbd> aplicar</span><span><kbd>e</kbd> enviada</span><span><kbd>d</kbd> descartar</span></div>
+    <button class="btn" id="btn-stats" type="button">Métricas</button>
+    <button class="btn primary" id="btn-mine" type="button">Buscar vagas</button>
+  </header>
+  <div class="notices" id="notices"></div>
+  <div class="body">
+    <aside class="list">
+      <div class="filters">
+        <div class="tabs" role="tablist" id="tabs"></div>
+        <input class="search" id="search" type="search" placeholder="Filtrar por empresa, cargo ou local" autocomplete="off">
+        <div class="batchbar">
+          <label><input type="checkbox" id="select-all"> selecionar visíveis</label>
+          <span class="spacer"></span>
+          <span id="sel-count">0 selecionadas</span>
+          <button class="btn" id="btn-batch" type="button" disabled>Preparar selecionadas</button>
+        </div>
+      </div>
+      <div class="rows" id="rows" role="listbox" aria-label="Vagas"></div>
+    </aside>
+    <main class="detail" id="detail"></main>
+  </div>
+</div>
+
+<dialog id="mine-dialog">
+  <form method="dialog" id="mine-form">
+    <strong>Buscar vagas novas</strong>
+    <label for="mine-source">Fonte<select id="mine-source"></select></label>
+    <label for="mine-query">Termo (opcional)<input id="mine-query" placeholder="ex.: backend, python"></label>
+    <label for="mine-limit">Máximo por fonte<input id="mine-limit" type="number" min="5" max="100" value="30"></label>
+    <label class="check" for="mine-remote"><input id="mine-remote" type="checkbox" checked> só remotas / LATAM / globais</label>
+    <label class="check" for="mine-levels"><input id="mine-levels" type="checkbox"> GitHub: incluir acima de júnior</label>
+    <div class="actions"><button class="btn primary" value="ok">Buscar</button><button class="btn ghost" value="cancel">Cancelar</button></div>
+  </form>
+</dialog>
+
+<dialog id="stats-dialog">
+  <form method="dialog">
+    <strong>Funil por fonte</strong>
+    <div id="stats-body"></div>
+    <div class="actions"><button class="btn" value="close">Fechar</button></div>
+  </form>
+</dialog>
+
+<script>
+const TOKEN = "__TOKEN__";
+const STATUS_LABEL = {
+  minerado: "nova", candidatura_preparada: "preparada", candidatura_enviada: "enviada",
+  rascunho_aberto: "rascunho", mensagem_enviada: "e-mail enviado", conexao_enviada: "conexão",
+  aguardando_followup: "follow-up", resposta: "resposta", entrevista: "entrevista", descartada: "descartada",
+};
+const TABS = [
+  {key: "todo", label: "Para aplicar", match: s => s === "minerado" || s === "candidatura_preparada"},
+  {key: "prep", label: "Preparadas", match: s => s === "candidatura_preparada"},
+  {key: "sent", label: "Enviadas", match: s => ["candidatura_enviada","mensagem_enviada","conexao_enviada","aguardando_followup"].includes(s)},
+  {key: "pos", label: "Retorno", match: s => s === "resposta" || s === "entrevista"},
+  {key: "all", label: "Todas", match: s => s !== "descartada"},
+];
+const state = {leads: [], tab: "todo", q: "", current: null, selected: new Set(), jobs: {}, info: null, detail: null, reports: {}};
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    method: opts.method || "GET",
+    headers: {"X-Prospector-Token": TOKEN, "Content-Type": "application/json"},
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const data = await res.json().catch(() => ({error: `resposta inválida (${res.status})`}));
+  if (!res.ok) throw new Error(data.error || `erro ${res.status}`);
+  return data;
+}
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fileUrl = (id, name) => `/files/${id}/${name}?token=${encodeURIComponent(TOKEN)}`;
+
+let toastTimer;
+function toast(msg, err = false) {
+  let t = $(".toast");
+  if (!t) { t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); document.body.appendChild(t); }
+  t.textContent = msg; t.classList.toggle("err", err); t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, err ? 7000 : 3500);
+}
+
+function scoreChip(score) {
+  if (score === null || score === undefined) return `<span class="score s-na" title="A vaga não cita competências reconhecidas">—</span>`;
+  const cls = score >= 70 ? "s-hi" : score >= 45 ? "s-mid" : "s-lo";
+  return `<span class="score ${cls}" title="Competências da vaga que seu CV comprova">${score}%</span>`;
+}
+function statusPill(status, leadId) {
+  if (leadId && state.jobs[leadId]) return `<span class="pill run">${state.jobs[leadId].kind === "apply" ? "abrindo…" : "preparando…"}</span>`;
+  const cls = status === "candidatura_preparada" ? "prep"
+    : ["candidatura_enviada","mensagem_enviada","conexao_enviada","aguardando_followup"].includes(status) ? "sent"
+    : ["resposta","entrevista"].includes(status) ? "pos" : status === "descartada" ? "off" : "";
+  return `<span class="pill ${cls}">${esc(STATUS_LABEL[status] || status)}</span>`;
+}
+
+function visibleLeads() {
+  const tab = TABS.find(t => t.key === state.tab);
+  const q = state.q.toLowerCase();
+  return state.leads.filter(l => tab.match(l.status) && (!q || `${l.company} ${l.title} ${l.location} ${l.source}`.toLowerCase().includes(q)));
+}
+
+function renderTop() {
+  const info = state.info; if (!info) return;
+  const c = info.counts || {};
+  const sum = keys => keys.reduce((a, k) => a + (c[k] || 0), 0);
+  $("#counters").innerHTML =
+    `<span><b>${sum(["minerado"])}</b> novas</span><span><b>${sum(["candidatura_preparada"])}</b> preparadas</span>` +
+    `<span><b>${sum(["candidatura_enviada","mensagem_enviada","conexao_enviada","aguardando_followup"])}</b> enviadas</span>` +
+    `<span><b>${sum(["resposta","entrevista"])}</b> com retorno</span>`;
+  const notes = [];
+  if (!info.resume_loaded) notes.push(`<div class="notice"><b>Falta o CV-mestre.</b> Coloque seu currículo (PDF ou DOCX) na pasta do projeto e rode <code>python3 prospector.py importar-cv caminho/do/cv.pdf</code>.</div>`);
+  if (!info.llm_configured) notes.push(`<div class="notice"><b>Falta a chave da IA.</b> Adicione <code>ANTHROPIC_API_KEY=...</code> ao arquivo <code>.env</code> e reinicie o painel.</div>`);
+  if (!info.autofill) notes.push(`<div class="notice"><b>Preenchimento automático desligado.</b> Rode <code>pip3 install playwright</code> e reinicie; até lá, "Aplicar" abre a vaga e mostra os dados para copiar.</div>`);
+  $("#notices").innerHTML = notes.join("");
+  $("#tabs").innerHTML = TABS.map(t => {
+    const n = state.leads.filter(l => t.match(l.status)).length;
+    return `<button class="tab" role="tab" type="button" data-tab="${t.key}" aria-selected="${t.key === state.tab}">${t.label} <span style="opacity:.7">${n}</span></button>`;
+  }).join("");
+}
+
+function renderList() {
+  const leads = visibleLeads();
+  const rows = $("#rows");
+  if (!leads.length) {
+    rows.innerHTML = `<div class="empty">${state.leads.length ? "Nada nesta aba." : "Nenhuma vaga ainda. Use <b>Buscar vagas</b>."}</div>`;
+  } else {
+    rows.innerHTML = leads.map(l => `
+      <div class="row" role="option" data-id="${l.id}" aria-current="${l.id === state.current}">
+        <input type="checkbox" data-sel="${l.id}" ${state.selected.has(l.id) ? "checked" : ""} aria-label="Selecionar ${esc(l.company)}">
+        <div style="min-width:0">
+          <div class="co">${esc(l.company)}</div>
+          <div class="ti">${esc(l.title.replace(l.company + " - ", ""))}</div>
+          <div class="mt">${esc([l.location, l.source, l.posted_at].filter(Boolean).join(" · "))}</div>
+        </div>
+        <div class="side">${scoreChip(l.score)}${statusPill(l.status, l.id)}</div>
+      </div>`).join("");
+  }
+  $("#sel-count").textContent = `${state.selected.size} selecionada${state.selected.size === 1 ? "" : "s"}`;
+  $("#btn-batch").disabled = !state.selected.size || !state.info?.llm_configured || !state.info?.resume_loaded;
+}
+
+function listSection(title, items, cls) {
+  if (!items || !items.length) return "";
+  return `<div><div class="lbl">${title}</div><div class="chips">${items.map(i => `<span class="chip ${cls}">${esc(i)}</span>`).join("")}</div></div>`;
+}
+
+function renderReport(id) {
+  const r = state.reports[id]; if (!r) return "";
+  if (r.mode === "manual") {
+    const v = r.values;
+    const rowsHtml = Object.entries({"Nome": v.full_name, "E-mail": v.email, "Telefone": v.phone, "LinkedIn": v.linkedin, "GitHub": v.github, "Cidade": v.location, "Arquivo do CV": v.resume})
+      .filter(([, val]) => val).map(([k, val]) => `<li><b>${k}:</b> <code>${esc(val)}</code> <button class="btn ghost" type="button" data-copy="${esc(val)}">copiar</button></li>`).join("");
+    return `<section class="card report"><h2>Dados para colar no formulário</h2><p class="hint">Abrimos a vaga no navegador. Instale o Playwright para o preenchimento automático.</p><ul>${rowsHtml}</ul></section>`;
+  }
+  const rep = r.report;
+  const block = (t, arr) => arr && arr.length ? `<div><div class="lbl">${t}</div><ul>${arr.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+  return `<section class="card report"><h2>Formulário aberto no Chrome</h2>
+    <p class="hint">Revise na janela do Chrome e clique em enviar lá. Depois use <b>Marcar enviada</b>.</p>
+    <div class="grid2">${block("Preenchido", rep.filled)}${block("Anexado", rep.uploaded)}${block("Respondido pela IA (revise)", rep.answered)}${block("Precisa de você", rep.manual)}${block("Problemas", rep.errors)}</div></section>`;
+}
+
+function renderDetail() {
+  const d = state.detail;
+  const box = $("#detail");
+  if (!d) {
+    box.innerHTML = `<div class="placeholder"><div><h2>Escolha uma vaga</h2><p>Prepare o CV adaptado, revise, aplique com o formulário já preenchido e marque como enviada. Use <kbd>j</kbd> e <kbd>k</kbd> para andar pela fila.</p></div></div>`;
+    return;
+  }
+  const p = d.package;
+  const running = state.jobs[d.id];
+  const canPrepare = state.info?.llm_configured && state.info?.resume_loaded && !running;
+  const role = d.title.replace(d.company + " - ", "");
+  const applyUrl = (d.ats_links && d.ats_links[0]) || d.url;
+  const sentStatuses = ["candidatura_enviada","mensagem_enviada","conexao_enviada","aguardando_followup","resposta","entrevista"];
+  let html = `<div class="dwrap">
+    <div class="dhead">
+      <div style="min-width:0">
+        <h1>${esc(d.company)}</h1>
+        <div class="role">${esc(role)}</div>
+        <div class="meta">
+          ${statusPill(d.status, d.id)} ${scoreChip(d.score)}
+          ${d.location ? `<span>${esc(d.location)}</span>` : ""}
+          <span>${esc(d.source)}</span>
+          ${d.posted_at ? `<span>publicada ${esc(d.posted_at)}</span>` : ""}
+          <a href="${esc(applyUrl)}" target="_blank" rel="noopener">abrir vaga ↗</a>
+          ${d.emails.length ? `<span>e-mail: ${esc(d.emails.join(", "))}</span>` : ""}
+        </div>
+      </div>
+      <div class="actions">
+        <select id="lang" aria-label="Idioma do CV">
+          <option value="">idioma: ${d.region === "intl" ? "inglês" : "português"}</option>
+          <option value="en">inglês</option><option value="pt">português</option>
+        </select>
+        <button class="btn ${p ? "" : "primary"}" id="act-prepare" type="button" ${canPrepare ? "" : "disabled"}>${p ? "Refazer CV" : "Preparar CV"}</button>
+        <button class="btn ${p ? "primary" : ""}" id="act-apply" type="button" ${p && !running ? "" : "disabled"}>Aplicar</button>
+        <button class="btn" id="act-sent" type="button" ${sentStatuses.includes(d.status) ? "disabled" : ""}>Marcar enviada</button>
+        <select id="act-status" aria-label="Mudar status">
+          <option value="">mais…</option>
+          ${["resposta","entrevista","descartada","minerado"].map(s => `<option value="${s}">${STATUS_LABEL[s]}</option>`).join("")}
+        </select>
+      </div>
+    </div>`;
+  if (running) html += `<div class="card"><h2>${running.kind === "apply" ? "Abrindo o formulário" : "Adaptando o currículo"}</h2><p class="hint">${running.kind === "apply" ? "O Chrome vai abrir com os campos preenchidos." : "A IA está lendo a vaga e reescrevendo seu CV a partir do CV-mestre (20 a 60 s)."}</p></div>`;
+  html += renderReport(d.id);
+  if (p) {
+    html += `<div class="grid2">
+      <section class="card"><h2>Aderência</h2>
+        ${p.fit_summary ? `<p>${esc(p.fit_summary)}</p>` : ""}
+        ${listSection("Coberto no CV", p.keywords_used, "ok")}
+        ${listSection("Lacunas (não foram inventadas)", p.missing_requirements, "gap")}
+        ${p.warnings.length ? `<div><div class="lbl">Revise</div><ul class="warns">${p.warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul></div>` : ""}
+        <p class="hint">Idioma ${p.language} · descrição via ${esc(p.jd_source || "—")} · ${esc(p.model)} · ${p.usage && p.usage.input_tokens ? `${p.usage.input_tokens + p.usage.output_tokens} tokens` : ""}</p>
+      </section>
+      <section class="card"><h2>Carta de apresentação</h2>
+        <textarea class="letter" id="letter" aria-label="Carta de apresentação">${esc(p.cover_letter)}</textarea>
+        <div class="actions"><button class="btn" id="act-letter" type="button">Salvar carta</button><span class="hint">Usada em campos de carta e respostas.</span></div>
+      </section>
+    </div>
+    <section class="card"><h2>Currículo adaptado</h2>
+      <div class="actions">
+        ${p.cv_pdf ? `<a class="btn" href="${fileUrl(d.id, "cv.pdf")}" target="_blank" rel="noopener">Abrir PDF</a>` : `<span class="hint">PDF não gerado; abra o HTML e imprima como PDF.</span>`}
+        <a class="btn ghost" href="${fileUrl(d.id, "cv.html")}" target="_blank" rel="noopener">Abrir HTML</a>
+        <span class="hint">${esc(p.folder)}</span>
+      </div>
+      <iframe class="preview" title="Prévia do currículo" src="${fileUrl(d.id, "cv.html")}"></iframe>
+    </section>`;
+  }
+  html += `<section class="card"><h2>Descrição minerada</h2><div class="jd">${esc(d.raw_body || "—")}</div></section>`;
+  if (d.events && d.events.length) {
+    html += `<section class="card"><h2>Histórico</h2><div class="timeline">${d.events.map(e => `<span>${esc(STATUS_LABEL[e.status] || e.status)} · ${esc(e.at.slice(0, 16))}${e.note ? ` · ${esc(e.note)}` : ""}</span>`).join("<span>→</span>")}</div></section>`;
+  }
+  box.innerHTML = html + "</div>";
+}
+
+async function refresh(keepDetail = true) {
+  try {
+    const [info, leads] = await Promise.all([api("/api/state"), api("/api/queue")]);
+    state.info = info; state.leads = leads;
+    renderTop(); renderList();
+    if (keepDetail && state.current) await openLead(state.current, false);
+  } catch (e) { toast(e.message, true); }
+}
+
+async function openLead(id, scroll = true) {
+  state.current = id;
+  renderList();
+  try { state.detail = await api(`/api/leads/${id}`); } catch (e) { toast(e.message, true); }
+  renderDetail();
+  if (scroll) document.querySelector(`.row[data-id="${id}"]`)?.scrollIntoView({block: "nearest"});
+}
+
+function track(job, onDone) {
+  if (job.lead_id) state.jobs[job.lead_id] = job;
+  renderList(); if (job.lead_id === state.current) renderDetail();
+  const tick = async () => {
+    let j;
+    try { j = await api(`/api/jobs/${job.id}`); } catch (e) { toast(e.message, true); return; }
+    if (j.state === "running") return setTimeout(tick, 1500);
+    if (job.lead_id) delete state.jobs[job.lead_id];
+    if (j.state === "error") toast(j.error, true); else onDone && onDone(j.result);
+    await refresh();
+  };
+  setTimeout(tick, 1200);
+}
+
+async function prepare(id) {
+  if (!state.info?.llm_configured || !state.info?.resume_loaded) return toast("Configure o CV-mestre e a chave da IA primeiro.", true);
+  const lang = id === state.current ? ($("#lang")?.value || "") : "";
+  try {
+    const job = await api(`/api/leads/${id}/prepare`, {method: "POST", body: {language: lang}});
+    track(job, pkg => toast(`CV de ${pkg.company} pronto${pkg.warnings.length ? " (com avisos)" : ""}.`));
+  } catch (e) { toast(e.message, true); }
+}
+async function apply(id) {
+  try {
+    const job = await api(`/api/leads/${id}/apply`, {method: "POST"});
+    track(job, res => { state.reports[id] = res; toast(res.mode === "autofill" ? "Formulário preenchido no Chrome. Revise e envie." : "Vaga aberta no navegador."); });
+  } catch (e) { toast(e.message, true); }
+}
+async function setStatus(id, status, note = "") {
+  try {
+    await api(`/api/leads/${id}/status`, {method: "POST", body: {status, note}});
+    toast(`Marcada como ${STATUS_LABEL[status] || status}.`);
+    const list = visibleLeads(); const idx = list.findIndex(l => l.id === id);
+    await refresh(false);
+    const next = visibleLeads()[idx] || visibleLeads()[idx - 1];
+    if (next) openLead(next.id); else { state.current = null; state.detail = null; renderDetail(); }
+  } catch (e) { toast(e.message, true); }
+}
+
+function move(delta) {
+  const list = visibleLeads(); if (!list.length) return;
+  const idx = list.findIndex(l => l.id === state.current);
+  const next = list[Math.max(0, Math.min(list.length - 1, idx + delta))] || list[0];
+  openLead(next.id);
+}
+
+document.addEventListener("click", async ev => {
+  const t = ev.target;
+  if (t.matches("[data-sel]")) {
+    const id = Number(t.dataset.sel);
+    t.checked ? state.selected.add(id) : state.selected.delete(id);
+    return renderList();
+  }
+  const row = t.closest(".row"); if (row) return openLead(Number(row.dataset.id));
+  const tab = t.closest("[data-tab]"); if (tab) { state.tab = tab.dataset.tab; renderTop(); return renderList(); }
+  if (t.matches("[data-copy]")) { navigator.clipboard?.writeText(t.dataset.copy); return toast("Copiado."); }
+  const id = state.current;
+  switch (t.id) {
+    case "act-prepare": return prepare(id);
+    case "act-apply": return apply(id);
+    case "act-sent": return setStatus(id, "candidatura_enviada", "marcada no painel");
+    case "act-letter":
+      try { await api(`/api/leads/${id}/cover-letter`, {method: "POST", body: {text: $("#letter").value}}); toast("Carta salva."); }
+      catch (e) { toast(e.message, true); }
+      return;
+    case "btn-batch": {
+      const ids = [...state.selected];
+      try {
+        const res = await api("/api/prepare-batch", {method: "POST", body: {ids}});
+        state.selected.clear();
+        res.jobs.forEach(j => track(j));
+        toast(`Preparando ${res.jobs.length} candidaturas em paralelo.`);
+      } catch (e) { toast(e.message, true); }
+      return;
+    }
+    case "btn-mine": {
+      $("#mine-source").innerHTML = `<option value="all">todas</option>` + (state.info?.sources || []).map(s => `<option>${s}</option>`).join("");
+      return $("#mine-dialog").showModal();
+    }
+    case "btn-stats": {
+      try {
+        const s = await api("/api/stats");
+        const row = r => `<tr><td>${esc(r.source)}</td><td>${r.leads}</td><td>${r.contacted}</td><td>${r.replied}</td><td>${r.rate === null ? "–" : r.rate + "%"}</td></tr>`;
+        $("#stats-body").innerHTML = `<table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums"><thead><tr style="text-align:left;color:var(--muted)"><th>Fonte</th><th>Leads</th><th>Enviadas</th><th>Retorno</th><th>Taxa</th></tr></thead><tbody>${s.sources.map(row).join("")}${row(s.total)}</tbody></table>`;
+        $("#stats-dialog").showModal();
+      } catch (e) { toast(e.message, true); }
+    }
+  }
+});
+document.addEventListener("change", ev => {
+  if (ev.target.id === "select-all") {
+    visibleLeads().forEach(l => ev.target.checked ? state.selected.add(l.id) : state.selected.delete(l.id));
+    renderList();
+  }
+  if (ev.target.id === "act-status" && ev.target.value) setStatus(state.current, ev.target.value, "painel");
+});
+$("#search").addEventListener("input", ev => { state.q = ev.target.value; renderList(); });
+$("#mine-dialog").addEventListener("close", async () => {
+  if ($("#mine-dialog").returnValue !== "ok") return;
+  try {
+    const job = await api("/api/mine", {method: "POST", body: {
+      source: $("#mine-source").value, query: $("#mine-query").value, limit: Number($("#mine-limit").value),
+      remote_only: $("#mine-remote").checked, all_levels: $("#mine-levels").checked}});
+    toast("Buscando vagas…");
+    track(job, r => {
+      const errs = Object.entries(r.sources).filter(([, v]) => v.error).map(([k]) => k);
+      toast(`${r.inserted} vagas novas (${r.duplicates} repetidas)` + (errs.length ? ` · indisponível: ${errs.join(", ")}` : ""));
+    });
+  } catch (e) { toast(e.message, true); }
+});
+document.addEventListener("keydown", ev => {
+  if (ev.target.matches("input, textarea, select") || ev.metaKey || ev.ctrlKey || ev.altKey || document.querySelector("dialog[open]")) return;
+  const id = state.current;
+  const actions = {
+    j: () => move(1), k: () => move(-1),
+    p: () => id && prepare(id),
+    a: () => id && state.detail?.package && apply(id),
+    e: () => id && setStatus(id, "candidatura_enviada", "marcada no painel"),
+    d: () => id && setStatus(id, "descartada", "painel"),
+    "/": () => { ev.preventDefault(); $("#search").focus(); },
+  };
+  if (actions[ev.key]) { actions[ev.key](); }
+});
+
+renderDetail();
+refresh().then(() => { const first = visibleLeads()[0]; if (first) openLead(first.id); });
+setInterval(() => { if (!Object.keys(state.jobs).length && document.visibilityState === "visible") refresh(false); }, 60000);
+</script>
+</body>
+</html>
