@@ -1,16 +1,18 @@
 import argparse
 import os
 
-from prospector.core.config import Color, load_env
-from prospector.core.db import get_repository
 from prospector.adapters.http import default_client
 from prospector.adapters.miners import build_miners
+from prospector.adapters.senders import EmlDraftSender, GmailWebSender, SendError, SmtpSender
+from prospector.core import config
+from prospector.core.config import Color, load_env
+from prospector.core.db import get_repository
 from prospector.domain.lead import LeadStatus
-from prospector.engine.copywriter import get_message_content
-from prospector.engine.mailer import create_eml_draft, open_gmail_web, send_smtp
 from prospector.engine.tailor import tailor_cv
 from prospector.ports import MiningOptions
+from prospector.profile import ProfileError, load_profile
 from prospector.services.mining import MiningService
+from prospector.services.outreach import OutreachError, OutreachService
 
 
 def _open_repo_verbose():
@@ -28,7 +30,7 @@ def _load_lead(repo, lead_id):
 
 
 def cmd_mine(args, repo):
-    miners = build_miners(default_client())
+    miners = build_miners(default_client(), sources=load_profile().fontes)
     names = list(miners) if args.source == "all" else [args.source]
     options = MiningOptions(query=args.query, all_levels=args.all_levels, remote_only=args.remote_only,
                             all_ats=args.all_ats, limit=args.limit)
@@ -70,20 +72,31 @@ def cmd_list(args, repo):
     print()
 
 
+def _print_message(msg, warnings):
+    print(f"\n{Color.CYAN}Para:{Color.RESET} {msg.to or '(sem e-mail)'}   "
+          f"{Color.CYAN}Modelo:{Color.RESET} {msg.template_key} ({msg.language})")
+    print(f"{Color.CYAN}Assunto:{Color.RESET} {msg.subject}")
+    print(f"{Color.CYAN}Anexo:{Color.RESET} {msg.attachment or 'nenhum'}")
+    print(f"{Color.DIM}{'-' * 65}{Color.RESET}\n{msg.body}\n{Color.DIM}{'-' * 65}{Color.RESET}")
+    for w in warnings:
+        print(f"{Color.YELLOW}⚠️ {w}{Color.RESET}")
+
+
 def cmd_show(args, repo):
     lead = _load_lead(repo, args.id)
     if not lead:
         return
-    subj, body = get_message_content("2" if lead.is_international else "1", nome="Team",
-                                     empresa=lead.company, vaga=lead.title)
+    service = OutreachService(repo, load_profile())
+    msg = service.build_message(lead, args.modelo, args.nome)
     print(f"\n{Color.BOLD}=== LEAD #{lead.id}: {lead.company} ==={Color.RESET}")
     print(f"Cargo: {lead.title} | Status: {lead.status.value} | Região: {lead.region.value}")
     if lead.location:
         print(f"Local: {lead.location}")
+    if lead.posted_at:
+        print(f"Publicada em: {lead.posted_at}")
     print(f"Contato: {lead.contact_summary or 'Sem e-mail explícito'}")
     print(f"URL: {lead.url}")
-    print(f"\n{Color.CYAN}Assunto:{Color.RESET} {subj}")
-    print(f"{Color.DIM}{'-' * 65}{Color.RESET}\n{body}\n{Color.DIM}{'-' * 65}{Color.RESET}")
+    _print_message(msg, service.warnings(lead, msg))
     events = repo.events(lead.id)
     if events:
         print(f"{Color.DIM}Histórico: " + " → ".join(f"{e['status']} ({e['at'][:10]})" for e in events) + Color.RESET)
@@ -94,28 +107,48 @@ def cmd_show(args, repo):
         print(f"🔗 Candidatura direta no ATS: {Color.GREEN}{lead.url}{Color.RESET}\n")
 
 
-def cmd_send(args, repo):
-    load_env()
-    user = os.environ.get("EMAIL_USER", "raphaelramosc@gmail.com")
-    password = os.environ.get("EMAIL_PASS")
-    if not password:
-        print(f"{Color.RED}❌ Erro: Senha de App não encontrada no arquivo .env nem em EMAIL_PASS.{Color.RESET}")
+def _make_sender(args, profile):
+    if args.command == "send":
+        load_env()
+        password = os.environ.get("EMAIL_PASS")
+        if not password and not args.dry_run:
+            raise OutreachError("senha de app não encontrada no .env nem em EMAIL_PASS")
+        return SmtpSender(os.environ.get("EMAIL_USER", profile.email), password or "")
+    if args.command == "gmail":
+        return GmailWebSender()
+    return EmlDraftSender(config.OUTPUT_DIR)
+
+
+def cmd_outreach(args, repo):
+    lead = _load_lead(repo, args.id)
+    if not lead:
         return
-    lead = _load_lead(repo, args.id)
-    if lead:
-        send_smtp(lead, repo, user, password, allow_no_attachment=args.sem_anexo)
-
-
-def cmd_gmail(args, repo):
-    lead = _load_lead(repo, args.id)
-    if lead:
-        open_gmail_web(lead, repo)
-
-
-def cmd_draft(args, repo):
-    lead = _load_lead(repo, args.id)
-    if lead:
-        create_eml_draft(lead, repo)
+    profile = load_profile()
+    service = OutreachService(repo, profile)
+    try:
+        sender = _make_sender(args, profile)
+        preview = service.build_message(lead, args.modelo, args.nome)
+        warnings = service.warnings(lead, preview)
+        msg, result = service.send(lead, sender, template_key=args.modelo, nome=args.nome,
+                                   allow_no_attachment=getattr(args, "sem_anexo", False), dry_run=args.dry_run)
+    except (OutreachError, SendError) as e:
+        print(f"{Color.RED}❌ {e}{Color.RESET}")
+        return
+    _print_message(msg, warnings)
+    if args.dry_run:
+        print(f"{Color.CYAN}🔎 {result.detail}{Color.RESET}\n")
+    elif result.delivered:
+        print(f"{Color.GREEN}{Color.BOLD}✅ E-mail enviado para {msg.to}! Lead #{lead.id} → mensagem_enviada "
+              f"(follow-up em 5 dias).{Color.RESET}\n")
+    else:
+        where = f" em {sender.last_path}" if getattr(sender, "last_path", None) else ""
+        print(f"{Color.GREEN}📝 {result.detail} aberto{where}.{Color.RESET}")
+        if not msg.attachment:
+            print(f"{Color.YELLOW}📎 Sem anexo: anexe o currículo manualmente.{Color.RESET}")
+        elif args.command == "gmail":
+            print(f"📎 Anexe manualmente: {msg.attachment}")
+        print(f"{Color.YELLOW}Lead #{lead.id} marcado como 'rascunho_aberto'. Depois de enviar de fato, rode:{Color.RESET}")
+        print(f"   python3 prospector.py update {lead.id} mensagem_enviada\n")
 
 
 def cmd_followups(args, repo):
@@ -123,13 +156,11 @@ def cmd_followups(args, repo):
     if not leads:
         print(f"\n{Color.GREEN}🎉 Nenhum follow-up pendente para hoje!{Color.RESET}\n")
         return
+    service = OutreachService(repo, load_profile())
     print(f"\n{Color.RED}{Color.BOLD}⚠️ ALERTA DE FOLLOW-UP (D+5): {len(leads)} contato(s) aguardando recontato!{Color.RESET}\n")
     for l in leads:
         print(f"📌 [ID {l.id}] {l.company} - {l.title} (Contatado em: {l.contacted_at})")
-        if l.is_international:
-            print(f"Hi Team, just following up to see if my background in high-throughput backend pipelines fits your needs at {l.company}. Best regards!")
-        else:
-            print(f"Olá, tudo bem? Passando apenas para saber se conseguiram avaliar meu perfil técnico na {l.company}. Um abraço!")
+        print(service.followup_text(l))
         print("-" * 65)
 
 
@@ -179,15 +210,20 @@ def build_parser():
     p.add_argument("--status", choices=LeadStatus.values())
     p.set_defaults(func=cmd_list)
 
+    templates = list(load_profile().templates)
     for name, helptext, func in [
         ("show", "Ver detalhes, histórico e mensagem de um lead", cmd_show),
-        ("send", "Enviar e-mail via SMTP com PDF anexado", cmd_send),
-        ("gmail", "Abrir Gmail Web com e-mail preenchido", cmd_gmail),
-        ("draft", "Gerar rascunho .eml com PDF", cmd_draft),
+        ("send", "Enviar e-mail via SMTP com PDF anexado", cmd_outreach),
+        ("gmail", "Abrir Gmail Web com e-mail preenchido (anexo manual)", cmd_outreach),
+        ("draft", "Gerar rascunho .eml com PDF em data/out/", cmd_outreach),
     ]:
         p = sub.add_parser(name, help=helptext)
         p.add_argument("id", type=int)
+        p.add_argument("--modelo", choices=templates, help="Template do perfil (padrão: pela região do lead)")
+        p.add_argument("--nome", help="Nome na saudação (padrão: saudacao_padrao do template)")
         p.set_defaults(func=func)
+        if name != "show":
+            p.add_argument("--dry-run", action="store_true", help="Só mostrar a mensagem; não envia nem muda o funil")
         if name == "send":
             p.add_argument("--sem-anexo", action="store_true", help="Enviar mesmo sem o PDF do currículo")
 
@@ -203,12 +239,16 @@ def build_parser():
 
 
 def main(argv=None):
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if not getattr(args, "func", None):
-        parser.print_help()
-        return
-    args.func(args, _open_repo_verbose())
+    try:
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if not getattr(args, "func", None):
+            parser.print_help()
+            return
+        args.func(args, _open_repo_verbose())
+    except ProfileError as e:
+        print(f"{Color.RED}❌ Perfil inválido: {e}{Color.RESET}")
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

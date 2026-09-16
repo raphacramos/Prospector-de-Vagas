@@ -9,7 +9,8 @@ from prospector.core import config
 from prospector.core.config import Color
 from prospector.core.utils import fetch_text, fetch_json, clean_html, compile_html_to_pdf
 from prospector.core.db import get_repository
-from prospector.engine.copywriter import get_message_content
+from prospector.profile import load_profile
+from prospector.services.outreach import render_template
 
 # Dicionário canônico de competências técnicas (Taxonomia ATS inspirada no Resume-Matcher)
 CANONICAL_SKILLS = {
@@ -280,9 +281,8 @@ def tailor_cv(empresa=None, vaga="Software Engineer", lead_id=None, url=None, sk
         print(f"{Color.YELLOW}⚠️ HTML gerado ({output_html_name}). Abra e imprima como PDF no navegador.{Color.RESET}")
 
     # Copywriter de Abordagem Sob Medida
-    model = "2" if lang == "en" else "1"
-    subj, msg = get_message_content(model, nome="Team", empresa=init_empresa, vaga=init_vaga)
-    print(f"\n{Color.BOLD}--- Mensagem de Abordagem Direta (< 400 caracteres) ---{Color.RESET}")
+    subj, msg = render_template(load_profile(), "intl" if lang == "en" else "br", init_empresa, init_vaga)
+    print(f"\n{Color.BOLD}--- Mensagem de Abordagem Direta ---{Color.RESET}")
     print(f"{Color.CYAN}Assunto:{Color.RESET} {subj}\n")
     print(msg)
     print("-" * 70 + "\n")

@@ -1,0 +1,62 @@
+{
+  "_comentario": "Copie para data/profile.json e edite. Sem data/profile.json, o Prospector usa este arquivo.",
+  "nome": "Raphael Ramos",
+  "email": "raphaelramosc@gmail.com",
+  "links": ["linkedin.com/in/raphael-c-1a7430108", "github.com/raphacramos"],
+  "max_caracteres_mensagem": 400,
+
+  "curriculos": {
+    "html_en": "curriculo_en.html",
+    "html_pt": "curriculo_pt_destaque.html",
+    "pdf_en": "Curriculo_Raphael_Ramos_EN.pdf",
+    "pdf_pt": "Curriculo_Raphael_Ramos_PT_Destaque.pdf",
+    "prefixo_pdf_calibrado": "Curriculo_Raphael_Ramos"
+  },
+
+  "templates": {
+    "br": {
+      "descricao": "Tech Lead / EM (Nacional - Backend & BINGO)",
+      "idioma": "pt",
+      "saudacao_padrao": "pessoal",
+      "assunto": "Aplicação Engenharia Backend - {empresa} - {meu_nome}",
+      "corpo": "Olá {nome},\n\nAcompanho a evolução técnica da {empresa} e vi a movimentação no time de engenharia.\nSou graduado em Computação pela UFCG, com atuação em pipelines de alta vazão e telemetria em tempo real no radiotelescópio BINGO.\nDomino Python, PostgreSQL e arquitetura limpa focada em resiliência e concorrência.\n\nTeria 5 min para um breve alinhamento técnico sobre os desafios atuais do time?\n\nAbraço,\n{assinatura}"
+    },
+    "intl": {
+      "descricao": "CTO / Engineering Lead (Internacional Remoto - English)",
+      "idioma": "en",
+      "saudacao_padrao": "Team",
+      "assunto": "Software Engineer Application - {empresa} - {meu_nome}",
+      "corpo": "Hi {nome},\n\nI follow {empresa}'s work and your focus on scaling backend services.\nGraduating in CS from UFCG, I engineered high-throughput telemetry pipelines with Python, HDF5, and SDR on the BINGO Telescope.\nMy background emphasizes Linux internals, algorithm optimization, and Clean Architecture.\n\nOpen to a brief 5-min chat on how my profile fits your engineering needs?\n\nBest regards,\n{assinatura}"
+    },
+    "recrutador": {
+      "descricao": "Recrutador Técnico / Talent Acquisition",
+      "idioma": "pt",
+      "saudacao_padrao": "pessoal",
+      "assunto": "Candidatura: {vaga} - {empresa} - {meu_nome}",
+      "corpo": "Olá {nome},\n\nNotei a oportunidade de {vaga} na {empresa}.\nMinha formação na UFCG abrange computação científica, sistemas operacionais e backend com Python, Docker e bancos relacionais.\nTenho inglês fluente e experiência como monitor de Algoritmos Avançados (LEDA) e Redes.\n\nPosso compartilhar meu currículo para avaliação direta junto à liderança técnica?\n\nAtenciosamente,\n{assinatura}"
+    }
+  },
+
+  "followups": {
+    "pt": "Olá, tudo bem? Passando apenas para saber se conseguiram avaliar meu perfil técnico na {empresa}. Um abraço!",
+    "en": "Hi Team, just following up to see if my background in high-throughput backend pipelines fits your needs at {empresa}. Best regards!"
+  },
+
+  "skills": [
+    "Python", "C/C++", "Java", "JavaScript/TypeScript", "SQL & Relational DBs", "PostgreSQL",
+    "NoSQL & Redis", "Bash & Shell Script", "Express / Node.js", "RESTful APIs",
+    "Distributed Systems", "High Throughput & Concurrency", "Clean Architecture & Design",
+    "Data Pipelines & Telemetry", "Machine Learning & AI", "Algorithms & Data Structures",
+    "Linux & Internals", "Computer Networks", "Docker & Containers", "Git & CI/CD"
+  ],
+  "_comentario_skills": "Liste só o que você sustenta numa entrevista. O tailor nunca adiciona ao CV algo fora de 'skills' + 'palavras_opcionais_cv'.",
+  "palavras_opcionais_cv": [],
+  "ancora_insercao_cv": "Docker, Git,",
+
+  "chrome_path": "",
+
+  "fontes": {
+    "github": ["backend-br/vagas", "datascience-br/vagas", "react-brasil/vagas"],
+    "greenhouse": ["canonical", "gitlab", "brex", "reddit", "elastic", "cloudflare"]
+  }
+}
