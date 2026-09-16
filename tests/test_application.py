@@ -230,6 +230,17 @@ class FieldPlanTest(unittest.TestCase):
         self.assertEqual([f.pid for f in plan.manual], ["c"])
         self.assertIsNone(classify(field("r", "Resume link (optional)", type="url")))
 
+    def test_perguntas_nao_viram_dado_fixo(self):
+        fields = [field("a", "Are you subject to agreements with your current employer?*", tag="select", required=True),
+                  field("b", "Have you ever worked at your current company before?"),
+                  field("c", "What's the name you'd prefer us to use?"),
+                  field("d", "Country of Residence"),
+                  field("e", "Current company")]
+        plan = plan_fields(fields, {**self.VALUES, "country": "Brazil"})
+        self.assertEqual(plan.fills, {"c": "Raphael", "d": "Brazil", "e": "BINGO"})
+        self.assertEqual(plan.questions, {"b": "Have you ever worked at your current company before?"})
+        self.assertEqual([f.pid for f in plan.manual], ["a"])
+
     def test_urls(self):
         self.assertEqual(application_url("https://jobs.lever.co/acme/abc"), "https://jobs.lever.co/acme/abc/apply")
         self.assertEqual(application_url("https://jobs.lever.co/acme/abc/apply"), "https://jobs.lever.co/acme/abc/apply")

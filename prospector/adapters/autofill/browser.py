@@ -41,6 +41,19 @@ SCAN_JS = r"""
     }
     return el.placeholder || el.name || '';
   };
+  const groupLabel = el => {
+    const fs = el.closest('fieldset');
+    if (fs && fs.querySelector('legend')) return text(fs.querySelector('legend'));
+    const rg = el.closest('[role="radiogroup"], [role="group"]');
+    if (rg && rg.getAttribute('aria-labelledby')) return text(document.getElementById(rg.getAttribute('aria-labelledby')));
+    let node = el.closest('label') ? el.closest('label').parentElement : el.parentElement;
+    for (let i = 0; node && i < 5; i++, node = node.parentElement) {
+      const l = Array.from(node.querySelectorAll('.application-label, legend, [class*="question-title"], [class*="label"], label'))
+        .find(x => !x.contains(el) && !x.querySelector('input'));
+      if (l && text(l)) return text(l);
+    }
+    return '';
+  };
   const out = [];
   let n = 0;
   const seenGroups = new Set();
@@ -48,24 +61,25 @@ SCAN_JS = r"""
     const type = (el.type || '').toLowerCase();
     if (['hidden', 'submit', 'button', 'image', 'reset'].includes(type)) return;
     if (!visible(el) || el.disabled) return;
+    // inputs auxiliares de componentes (React Select etc.) nao sao campos de verdade
+    if (type !== 'file' && (el.getAttribute('aria-hidden') === 'true' || el.tabIndex === -1)) return;
     if ((type === 'radio' || type === 'checkbox') && el.name) {
       if (seenGroups.has(el.name)) return;
       seenGroups.add(el.name);
     }
     const pid = 'p' + (n++);
     el.setAttribute('data-prospector-id', pid);
-    const group = el.closest('fieldset');
-    let label = labelOf(el);
-    if ((type === 'radio' || type === 'checkbox') && group) {
-      const legend = group.querySelector('legend');
-      if (legend) label = text(legend);
-    }
-    const required = el.required || el.getAttribute('aria-required') === 'true' || /\*\s*$/.test(label);
+    const choice = type === 'radio' || type === 'checkbox';
+    let label = choice ? groupLabel(el) || labelOf(el) : labelOf(el);
+    // combobox (React Select, autocomplete de cidade) se comporta como select
+    const isCombo = el.getAttribute('role') === 'combobox' || el.hasAttribute('aria-autocomplete');
+    const required = el.required || el.getAttribute('aria-required') === 'true' || /[*✱]\s*$/.test(label)
+      || (choice && !!document.querySelector(`input[name="${CSS.escape(el.name)}"][required]`));
     const hasValue = type === 'file' ? el.files.length > 0
       : (type === 'radio' || type === 'checkbox') ? !!document.querySelector(`input[name="${CSS.escape(el.name)}"]:checked`)
       : !!(el.value && el.value.trim());
     out.push({
-      pid, tag: el.tagName.toLowerCase(), type, label: label.slice(0, 300), name: el.name || el.id || '',
+      pid, tag: isCombo ? 'select' : el.tagName.toLowerCase(), type, label: label.slice(0, 300), name: el.name || el.id || '',
       required, has_value: hasValue,
       options: el.tagName === 'SELECT' ? Array.from(el.options).map(o => o.text.trim()).slice(0, 30) : [],
     });
@@ -216,7 +230,7 @@ def fill_page(page, lead_id, url, values, cover_letter_path, answer_fn, timeout_
         try:
             page.locator(f'[data-prospector-id="{pid}"]').set_input_files(path, timeout=10000)
             filled_ids.append(pid)
-            report.uploaded.append(f"{by_pid[pid].label or 'arquivo'}: {os.path.basename(path)}")
+            report.uploaded.append(os.path.basename(path))
         except Exception as e:
             report.errors.append(f"não anexei '{os.path.basename(path)}': {e.__class__.__name__}")
             plan.manual.append(by_pid[pid])
@@ -247,6 +261,10 @@ class AutofillWorker:
         while True:
             fut, lead_id, url, values, cl_path, answer_fn = self._jobs.get()
             if fut is None:
+                try:
+                    self.session.close()  # o Playwright precisa ser encerrado na mesma thread
+                except Exception:
+                    pass
                 break
             try:
                 ctx = self.session.context()
@@ -258,5 +276,9 @@ class AutofillWorker:
             except Exception as e:
                 fut.set_exception(e)
 
-    def stop(self):
+    def stop(self, wait=False):
+        if self._thread is None or not self._thread.is_alive():
+            return
         self._jobs.put((None,) * 6)
+        if wait:
+            self._thread.join(timeout=15)

@@ -1,5 +1,6 @@
 """Classificacao dos campos do formulario pelo rotulo. Puro Python (testavel sem navegador)."""
 import re
+from urllib.parse import urlparse
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -20,7 +21,7 @@ class FormField:
 RULES = [
     ("resume", re.compile(r"\b(resume|résumé|curr[ií]culo|\bcv\b)", re.I)),
     ("cover_letter", re.compile(r"cover\s*letter|carta( de apresenta[cç][aã]o)?|motivation letter", re.I)),
-    ("first_name", re.compile(r"first\s*name|given\s*name|primeiro nome|preferred first", re.I)),
+    ("first_name", re.compile(r"first\s*name|given\s*name|primeiro nome|preferred (first )?name|name you.d prefer", re.I)),
     ("last_name", re.compile(r"last\s*name|family\s*name|surname|sobrenome", re.I)),
     ("full_name", re.compile(r"full\s*name|^\s*(name|nome)\s*\*?\s*$|nome completo|legal name", re.I)),
     ("email", re.compile(r"e-?mail", re.I)),
@@ -29,25 +30,41 @@ RULES = [
     ("github", re.compile(r"git\s*hub", re.I)),
     ("website", re.compile(r"website|portfolio|portf[oó]lio|personal site|\bsite\b|other url|blog", re.I)),
     ("location", re.compile(r"^\s*(current\s*)?(location|city)\b|cidade|localiza[cç][aã]o|where are you (based|located)", re.I)),
-    ("company", re.compile(r"current\s*(company|employer)|empresa atual", re.I)),
+    ("company", re.compile(r"^\s*(current\s*(company|employer)|empresa atual)", re.I)),
+    ("country", re.compile(r"country of residence|^\s*country\b|pa[ií]s( de resid[eê]ncia)?", re.I)),
 ]
+
+# Regras que valem mesmo em rotulos longos ou com "?" (o resto so em rotulos curtos,
+# para nao responder "Voce ja trabalhou na empresa atual?" com o nome da empresa).
+ALWAYS = {"resume", "cover_letter", "first_name"}
 
 TEXT_TYPES = {"text", "email", "tel", "url", "search", "number", ""}
 QUESTION_HINT = re.compile(r"\?|why|how|what|describe|tell us|explain|por que|como|qual|descreva|conte", re.I)
 
 
-def classify(f: FormField) -> Optional[str]:
-    label = f"{f.label} {f.name}".strip()
+def _classify_text(text, f):
+    looks_like_question = "?" in text or len(text.strip()) > 60
     for key, pattern in RULES:
-        if pattern.search(label):
+        if looks_like_question and key not in ALWAYS:
+            continue
+        if pattern.search(text):
             if key == "resume" and f.type != "file" and f.tag != "textarea":
                 continue  # "resume" num campo de texto costuma ser link; tratar como pergunta
-            if key in ("cover_letter",) and f.type not in ("file",) and f.tag != "textarea":
+            if key == "cover_letter" and f.type != "file" and f.tag != "textarea":
                 continue
             if key not in ("resume", "cover_letter") and f.type == "file":
                 continue
             return key
     return None
+
+
+def classify(f: FormField) -> Optional[str]:
+    """Usa o rotulo; o atributo name so desempata quando o rotulo nao diz nada."""
+    key = _classify_text(f.label or "", f) if f.label else None
+    if key is None and f.name:
+        name = re.sub(r"[_\-\[\]]+", " ", f.name)
+        key = _classify_text(name, f)
+    return key
 
 
 def profile_values(profile, master, package):
@@ -64,6 +81,7 @@ def profile_values(profile, master, package):
         "github": str(cand.get("github") or ""),
         "website": str(cand.get("site") or cand.get("github") or ""),
         "location": str(cand.get("cidade") or (contact.location if contact else "")),
+        "country": str(cand.get("pais") or ""),
         "company": str(master.experiences[0].company if master and master.experiences else ""),
         "resume": package.cv_pdf if package else "",
         "cover_letter": package.cover_letter if package else "",
@@ -119,7 +137,7 @@ def plan_fields(fields: List[FormField], values: Dict[str, str], cover_letter_pa
 
 
 def detect_ats(url):
-    u = (url or "").lower()
+    u = urlparse(url or "").netloc.lower()
     for name in ("greenhouse", "lever", "ashbyhq", "workable"):
         if name in u:
             return "ashby" if name == "ashbyhq" else name

@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<h1>Backend Engineer</h1>
+<form id="application-form">
+  <div class="field-wrapper"><label for="first_name" id="first_name-label" class="label">First Name<span aria-hidden="true">*</span></label>
+    <input id="first_name" class="input" type="text" aria-required="true" aria-labelledby="first_name-label"></div>
+  <div class="field-wrapper"><label for="last_name" id="last_name-label" class="label">Last Name<span aria-hidden="true">*</span></label>
+    <input id="last_name" type="text" aria-required="true" aria-labelledby="last_name-label"></div>
+  <div class="field-wrapper"><label for="email" id="email-label">Email<span>*</span></label>
+    <input id="email" type="email" aria-required="true" aria-labelledby="email-label"></div>
+  <div class="field-wrapper"><label for="phone" id="phone-label">Phone</label><input id="phone" type="tel"></div>
+  <div class="file-upload"><div class="label upload-label" id="upload-label-resume">Resume/CV<span>*</span></div>
+    <input id="resume" type="file" style="position:absolute;width:1px;height:1px;opacity:0" aria-labelledby="upload-label-resume" aria-required="true"></div>
+  <div class="file-upload"><div class="label upload-label" id="upload-label-cover_letter">Cover Letter</div>
+    <input id="cover_letter" type="file" style="display:none" aria-labelledby="upload-label-cover_letter"></div>
+  <div class="field-wrapper"><label for="question_1" id="question_1-label">LinkedIn Profile</label><input id="question_1" type="text"></div>
+  <div class="field-wrapper"><label for="question_2" id="question_2-label">Why do you want to work at Acme?*</label>
+    <textarea id="question_2" aria-required="true"></textarea></div>
+  <div class="field-wrapper"><label for="question_3" id="question_3-label">What is your salary expectation?*</label>
+    <input id="question_3" type="text" aria-required="true"></div>
+  <div class="select"><label id="question_4-label" for="question_4">Are you legally authorized to work in the US?*</label>
+    <input id="question_4" role="combobox" aria-autocomplete="list" aria-required="true" aria-labelledby="question_4-label"></div>
+  <button type="submit" id="submit">Submit application</button>
+</form>
+<script>window.submitted=false;document.getElementById('application-form').addEventListener('submit',e=>{e.preventDefault();window.submitted=true;});</script>
+</body></html>

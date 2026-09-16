@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<form id="application-form" method="POST"><ul>
+  <li class="application-question resume"><div class="application-label">Resume/CV<span class="required">✱</span></div>
+    <div class="application-field"><input type="file" name="resume" id="resume-upload-input"></div></li>
+  <li class="application-question"><div class="application-label">Full name<span class="required">✱</span></div>
+    <div class="application-field"><input type="text" name="name" required></div></li>
+  <li class="application-question"><div class="application-label">Email<span class="required">✱</span></div>
+    <div class="application-field"><input type="email" name="email" required></div></li>
+  <li class="application-question"><div class="application-label">Phone</div>
+    <div class="application-field"><input type="text" name="phone"></div></li>
+  <li class="application-question"><div class="application-label">Current company</div>
+    <div class="application-field"><input type="text" name="org"></div></li>
+  <li class="application-question"><div class="application-label">LinkedIn URL</div>
+    <div class="application-field"><input type="text" name="urls[LinkedIn]"></div></li>
+  <li class="application-question"><div class="application-label">GitHub URL</div>
+    <div class="application-field"><input type="text" name="urls[GitHub]"></div></li>
+  <li class="application-question custom-question"><div class="application-label full-width"><div class="text">What interests you about this role?<span class="required">✱</span></div></div>
+    <div class="application-field full-width"><textarea name="cards[a][field0]" required></textarea></div></li>
+  <li class="application-question custom-question"><div class="application-label"><div class="text">Do you require visa sponsorship?<span class="required">✱</span></div></div>
+    <ul data-qa="multiple-choice">
+      <li><label><input type="radio" name="cards[a][field1]" value="Yes" required><span>Yes</span></label></li>
+      <li><label><input type="radio" name="cards[a][field1]" value="No"><span>No</span></label></li></ul></li>
+  <li class="application-question"><div class="application-label">Additional information</div>
+    <div class="application-field"><textarea name="comments" placeholder="Add a cover letter or anything else you want to share."></textarea></div></li>
+</ul><button type="submit">Submit application</button></form>
+</body></html>

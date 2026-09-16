@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body><div id="root"></div>
+<script>
+// Ashby monta o formulario depois do carregamento (React)
+setTimeout(() => {
+  document.getElementById('root').innerHTML = `
+  <div class="ashby-application-form-container">
+    <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" for="_systemfield_name">Name<span>*</span></label>
+      <input id="_systemfield_name" name="_systemfield_name" type="text" required></div>
+    <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" for="_systemfield_email">Email<span>*</span></label>
+      <input id="_systemfield_email" name="_systemfield_email" type="email" required></div>
+    <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" for="_systemfield_resume">Resume<span>*</span></label>
+      <input id="_systemfield_resume" type="file" style="display:none" required></div>
+    <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" for="f1">LinkedIn</label>
+      <input id="f1" type="text"></div>
+    <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" for="f2">Location</label>
+      <input id="f2" type="text" role="combobox"></div>
+    <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" for="f3">Tell us about a project you are proud of</label>
+      <textarea id="f3"></textarea></div>
+    <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" for="f4">Anything else?</label>
+      <input id="f4" type="text" value="já preenchido"></div>
+    <button>Submit Application</button>
+  </div>`;
+  const nameInput = document.getElementById('_systemfield_name');
+  window.reactValue = '';
+  nameInput.addEventListener('input', e => window.reactValue = e.target.value);
+}, 400);
+</script></body></html>
