@@ -100,14 +100,19 @@ python3 prospector.py tailor --empresa "Cloudflare" --jd vaga_cloudflare.txt
 
 ```bash
 # ⚡ Disparo 100% automatizado via SMTP com anexo automático do PDF
+#    (aborta se o PDF não existir; use --sem-anexo para enviar mesmo assim)
 python3 prospector.py send <ID>
 
 # 🌐 Abertura do Gmail Web com assunto, mensagem e destinatário preenchidos
 python3 prospector.py gmail <ID>
 
-# 📄 Geração de rascunho .eml com PDF anexado
+# 📄 Geração de rascunho .eml com PDF anexado (salvo em data/out/)
 python3 prospector.py draft <ID>
 ```
+
+`gmail` e `draft` marcam o lead como `rascunho_aberto`. Depois de enviar de fato, rode `python3 prospector.py update <ID> mensagem_enviada` para iniciar a contagem do follow-up D+5.
+
+Idioma da mensagem e do currículo: vagas de Hacker News, Greenhouse e SimplifyJobs usam inglês; vagas do GitHub (mercado brasileiro) usam português. A regra fica em `prospector/core/region.py`.
 
 ---
 
@@ -128,6 +133,22 @@ python3 prospector.py update <ID> resposta
 ```
 
 ---
+
+## 📁 Arquivos pessoais (`data/`)
+
+A pasta `data/` é ignorada pelo git. Coloque nela os currículos base (`curriculo_en.html`, `curriculo_pt_destaque.html`, `Curriculo_Raphael_Ramos_EN.pdf`, `Curriculo_Raphael_Ramos_PT_Destaque.pdf`). A raiz do projeto continua sendo aceita como local antigo. Os currículos calibrados e os rascunhos `.eml` são gerados em `data/out/`.
+
+## 🧪 Testes
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Os testes não acessam a rede, não enviam e-mails e não tocam no `prospector.db`.
+
+## 🏛️ Arquitetura e roadmap
+
+Veja [`docs/arquitetura/001-revisao-e-plano-v3.md`](docs/arquitetura/001-revisao-e-plano-v3.md). A pasta `.claude/` contém os agentes, regras e comandos do [ECC](https://github.com/affaan-m/ECC) usados no planejamento.
 
 ## 📄 Licença
 

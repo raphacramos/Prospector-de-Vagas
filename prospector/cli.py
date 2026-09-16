@@ -3,6 +3,7 @@ import sys
 import argparse
 
 from prospector.core.config import Color, load_env
+from prospector.core.region import is_international
 from prospector.core.db import (
     init_db, insert_lead, get_lead, list_leads, 
     update_status, get_pending_followups
@@ -19,11 +20,11 @@ def cmd_mine(args):
     init_db()
     all_leads = []
     if args.source in ["all", "github"]:
-        all_leads.extend(mine_github(junior_only=not args.all_levels))
+        all_leads.extend(mine_github(junior_only=not args.all_levels, query=args.query))
     if args.source in ["all", "hn"]:
         all_leads.extend(mine_hacker_news(query=args.query or "Python"))
     if args.source in ["all", "greenhouse"]:
-        all_leads.extend(mine_greenhouse(query=args.query or "Python"))
+        all_leads.extend(mine_greenhouse(query=args.query))
     if args.source in ["all", "simplify"]:
         all_leads.extend(mine_simplify(
             query=args.query, 
@@ -65,7 +66,7 @@ def cmd_show(args):
         print(f"{Color.RED}Lead #{args.id} não encontrado.{Color.RESET}")
         return
     lid, comp, title, src, url, contact, raw_body, status = lead
-    is_intl = any(k in src.lower() for k in ["hacker news", "international", "greenhouse", "simplify"])
+    is_intl = is_international(src)
     model = "2" if is_intl else "1"
     subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
 
@@ -93,7 +94,7 @@ def cmd_send(args):
     if not lead:
         print(f"{Color.RED}Lead #{args.id} não encontrado.{Color.RESET}")
         return
-    send_smtp(lead, user, password)
+    send_smtp(lead, user, password, allow_no_attachment=args.sem_anexo)
 
 def cmd_gmail(args):
     init_db()
@@ -121,7 +122,7 @@ def cmd_followups(args):
     print(f"\n{Color.RED}{Color.BOLD}⚠️ ALERTA DE FOLLOW-UP (D+5): {len(rows)} contato(s) aguardando recontato!{Color.RESET}\n")
     for r in rows:
         lid, comp, title, src, c_date = r
-        is_intl = "hacker news" in src.lower() or "greenhouse" in src.lower()
+        is_intl = is_international(src)
         print(f"📌 [ID {lid}] {comp} - {title} (Contatado em: {c_date})")
         if is_intl:
             print(f"Hi Team, just following up to see if my background in high-throughput backend pipelines fits your needs at {comp}. Best regards!")
@@ -166,6 +167,7 @@ def main():
     # send
     p_send = subparsers.add_parser("send", help="Enviar e-mail via SMTP com PDF anexado")
     p_send.add_argument("id", type=int)
+    p_send.add_argument("--sem-anexo", action="store_true", help="Enviar mesmo sem o PDF do currículo")
 
     # gmail
     p_gmail = subparsers.add_parser("gmail", help="Abrir Gmail Web com e-mail preenchido")
@@ -181,7 +183,7 @@ def main():
     # update
     p_update = subparsers.add_parser("update", help="Atualizar status de um lead no funil")
     p_update.add_argument("id", type=int)
-    p_update.add_argument("status", choices=["minerado", "conexao_enviada", "mensagem_enviada", "aguardando_followup", "resposta", "entrevista", "descartada"])
+    p_update.add_argument("status", choices=["minerado", "rascunho_aberto", "conexao_enviada", "mensagem_enviada", "aguardando_followup", "resposta", "entrevista", "descartada"])
 
     args = parser.parse_args()
 

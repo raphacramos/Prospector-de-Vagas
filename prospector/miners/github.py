@@ -3,7 +3,20 @@ from prospector.core.config import Color
 from prospector.core.utils import clean_html, fetch_json
 from prospector.miners.base import is_blacklisted, extract_contacts
 
-def mine_github(repos=None, max_per_repo=50, junior_only=True):
+# Antes o filtro usava a substring "eng", que casava com "english", "length" etc.
+BACKEND_PATTERNS = [
+    r"\bpython\b", r"\bback-?end\b", r"\bdados\b", r"\bdata (?:engineer|platform|pipeline)",
+    r"\bengenh\w* de dados\b", r"\bnode(?:\.?js)?\b", r"\bpostgres(?:ql)?\b",
+    r"\bdjango\b", r"\bfastapi\b", r"\bflask\b",
+]
+
+
+def is_backend_role(text):
+    text_lower = (text or "").lower()
+    return any(re.search(p, text_lower) for p in BACKEND_PATTERNS)
+
+
+def mine_github(repos=None, max_per_repo=50, junior_only=True, query=None):
     if repos is None:
         repos = ["backend-br/vagas", "datascience-br/vagas", "react-brasil/vagas"]
     results = []
@@ -25,11 +38,13 @@ def mine_github(repos=None, max_per_repo=50, junior_only=True):
             full_text = f"{title} {body} {labels_str}"
 
             is_junior = any(k in full_text.lower() for k in ["júnior", "junior", "estágio", "estagio", "entry level", "trainee", "associate", "pleno"])
-            is_python_backend = any(k in full_text.lower() for k in ["python", "backend", "dados", "data", "eng", "node", "postgresql"])
+            is_python_backend = is_backend_role(full_text)
 
             if junior_only and not is_junior:
                 continue
             if not is_python_backend:
+                continue
+            if query and query.lower() not in full_text.lower():
                 continue
             if is_blacklisted(body) and not ("email" in body.lower() or "e-mail" in body.lower()):
                 continue

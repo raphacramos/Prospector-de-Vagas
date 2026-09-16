@@ -5,7 +5,8 @@ import json
 from collections import Counter
 from datetime import datetime
 
-from prospector.core.config import Color, HTML_EN, HTML_PT, BASE_DIR
+from prospector.core import config
+from prospector.core.config import Color
 from prospector.core.utils import fetch_text, fetch_json, clean_html, compile_html_to_pdf
 from prospector.core.db import get_lead
 from prospector.engine.copywriter import get_message_content
@@ -14,10 +15,10 @@ from prospector.engine.copywriter import get_message_content
 CANONICAL_SKILLS = {
     # Linguagens de Programação
     "Python": [r"\bpython\b", r"\bpython3\b"],
-    "C/C++": [r"\bc\+\+\b", r"\bcpp\b", r"\bc/c\+\+\b"],
+    "C/C++": [r"(?<![\w+])c\+\+(?![\w+])", r"\bcpp\b", r"\bc/c\+\+(?![\w+])"],
     "Java": [r"\bjava\b"],
     "JavaScript/TypeScript": [r"\bjavascript\b", r"\btypescript\b", r"\bnode\.js\b", r"\bnodejs\b", r"\breact\.js\b", r"\breact\b"],
-    "Go": [r"\bgo\b", r"\bgolang\b"],
+    "Go": [r"\bgolang\b"],  # "Go" com maiuscula fica em CASE_SENSITIVE_SKILLS
     "Rust": [r"\brust\b"],
     "SQL & Relational DBs": [r"\bsql\b", r"\brelational database\b", r"\bdatabase systems\b", r"\brdbms\b", r"\bacid\b"],
     "PostgreSQL": [r"\bpostgresql\b", r"\bpostgres\b"],
@@ -42,13 +43,19 @@ CANONICAL_SKILLS = {
     "Machine Learning & AI": [r"\bmachine learning\b", r"\bartificial intelligence\b", r"\bai\b", r"\bstatistical inference\b", r"\bscikit-learn\b", r"\bnumpy\b", r"\bpandas\b", r"\bscipy\b", r"\bpytorch\b", r"\btensorflow\b"],
 
     # Fundamentos de Computação
-    "Algorithms & Data Structures": [r"\balgorithms\b", r"\bdata structures\b", r"\basymptotic\b", r"\bcomplexity\b", r"\bo\(n\)\b", r"\bdynamic programming\b", r"\bgraph algorithms\b"],
+    "Algorithms & Data Structures": [r"\balgorithms\b", r"\bdata structures\b", r"\basymptotic\b", r"\bcomplexity\b", r"\bo\(n\)", r"\bdynamic programming\b", r"\bgraph algorithms\b"],
     "Linux & Internals": [r"\blinux\b", r"\bunix\b", r"\bsysadmin\b", r"\bsystems administration\b", r"\boperating systems\b", r"\bposix\b"],
     "Computer Networks": [r"\bnetworking\b", r"\bcomputer networks\b", r"\bnetwork protocols\b", r"\btcp/ip\b", r"\bhttp\b", r"\bsockets\b"],
 
     # Infraestrutura & Ferramental
     "Docker & Containers": [r"\bdocker\b", r"\bcontainers\b", r"\bcontainerization\b", r"\bkubernetes\b"],
     "Git & CI/CD": [r"\bgit\b", r"\bgithub\b", r"\bci/cd\b", r"\bcontinuous integration\b"]
+}
+
+# Padroes checados no texto original (sem lower), para nao confundir com palavras comuns.
+# Ex.: "go" em "go above and beyond" nao e a linguagem Go.
+CASE_SENSITIVE_SKILLS = {
+    "Go": [r"\bGo\b(?!\s+(?:to|above|beyond|ahead|back|through|live|over|further)\b)"],
 }
 
 STOPWORDS = {
@@ -108,6 +115,9 @@ def extract_canonical_skills(text):
             if re.search(pat, text_lower, re.IGNORECASE):
                 matched.add(skill_name)
                 break
+    for skill_name, patterns in CASE_SENSITIVE_SKILLS.items():
+        if any(re.search(pat, text) for pat in patterns):
+            matched.add(skill_name)
     return matched
 
 def compute_cosine_similarity(text1, text2):
@@ -166,7 +176,11 @@ def tailor_cv(empresa=None, vaga="Software Engineer", lead_id=None, url=None, sk
     print(f"\n{Color.CYAN}🎯 Executando CV Tailoring & ATS Analysis Engine para: {Color.BOLD}{init_empresa}{Color.RESET}\n")
 
     # Lê currículo base
-    base_html_path = HTML_EN if lang == "en" else HTML_PT
+    base_html_path = config.HTML_EN if lang == "en" else config.HTML_PT
+    if not os.path.exists(base_html_path):
+        print(f"{Color.RED}❌ Currículo base não encontrado: {base_html_path}{Color.RESET}")
+        print("   Coloque o HTML do currículo em data/ (ou na raiz do projeto) e rode de novo.")
+        return None, None
     with open(base_html_path, "r", encoding="utf-8") as f:
         base_html = f.read()
     resume_clean_text = clean_html(base_html)
@@ -247,12 +261,13 @@ def tailor_cv(empresa=None, vaga="Software Engineer", lead_id=None, url=None, sk
 
     clean_empresa = re.sub(r"[^a-zA-Z0-9]", "_", init_empresa)
     output_html_name = f"curriculo_tailored_{clean_empresa}.html"
-    output_html_path = os.path.join(BASE_DIR, output_html_name)
+    output_dir = config.ensure_output_dir()
+    output_html_path = os.path.join(output_dir, output_html_name)
     with open(output_html_path, "w", encoding="utf-8") as f:
         f.write(tailored_html)
 
     output_pdf_name = f"Curriculo_Raphael_Ramos_{clean_empresa}.pdf"
-    output_pdf_path = os.path.join(BASE_DIR, output_pdf_name)
+    output_pdf_path = os.path.join(output_dir, output_pdf_name)
 
     print(f"⚙️ Compilando PDF sob medida via Chrome headless...")
     success = compile_html_to_pdf(output_html_path, output_pdf_path, timeout=20)

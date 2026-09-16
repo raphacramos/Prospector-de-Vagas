@@ -3,11 +3,30 @@ import os
 # Raiz do projeto (diretório acima de prospector/)
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Arquivos pessoais e gerados ficam em data/ (ignorado pelo git)
+DATA_DIR = os.path.join(ROOT_DIR, "data")
+OUTPUT_DIR = os.path.join(DATA_DIR, "out")
+
+
+def resolve_asset(filename):
+    """Procura o arquivo em data/ e depois na raiz (local antigo). Se nao existir, aponta para data/."""
+    for folder in (DATA_DIR, ROOT_DIR):
+        candidate = os.path.join(folder, filename)
+        if os.path.exists(candidate):
+            return candidate
+    return os.path.join(DATA_DIR, filename)
+
+
+def ensure_output_dir():
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    return OUTPUT_DIR
+
+
 DB_PATH = os.path.join(ROOT_DIR, "prospector.db")
-PDF_EN = os.path.join(ROOT_DIR, "Curriculo_Raphael_Ramos_EN.pdf")
-PDF_PT = os.path.join(ROOT_DIR, "Curriculo_Raphael_Ramos_PT_Destaque.pdf")
-HTML_EN = os.path.join(ROOT_DIR, "curriculo_en.html")
-HTML_PT = os.path.join(ROOT_DIR, "curriculo_pt_destaque.html")
+PDF_EN = resolve_asset("Curriculo_Raphael_Ramos_EN.pdf")
+PDF_PT = resolve_asset("Curriculo_Raphael_Ramos_PT_Destaque.pdf")
+HTML_EN = resolve_asset("curriculo_en.html")
+HTML_PT = resolve_asset("curriculo_pt_destaque.html")
 ENV_PATH = os.path.join(ROOT_DIR, ".env")
 
 class Color:

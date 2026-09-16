@@ -7,28 +7,50 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 
-from prospector.core.config import Color, PDF_EN, PDF_PT, BASE_DIR
+from prospector.core import config
+from prospector.core.config import Color
 from prospector.core.db import update_status
+from prospector.core.region import is_international
 from prospector.engine.copywriter import get_message_content
 from prospector.miners.base import EMAIL_REGEX
 
-def send_smtp(lead, user, password):
-    """Envia o e-mail via SMTP do Gmail com o PDF correspondente anexado."""
+DRAFT_STATUS = "rascunho_aberto"
+
+
+def prepare_message(lead):
+    """Escolhe destinatario, template e PDF a partir da regiao do lead (regra unica)."""
     lid, comp, title, src, url, contact, raw_body, status = lead
     emails = re.findall(EMAIL_REGEX, contact or "")
-    if not emails:
-        print(f"{Color.RED}❌ Lead #{lid} não possui e-mail direto cadastrado.{Color.RESET}")
-        return False
-    to_addr = emails[0]
-
-    is_intl = "hacker news" in src.lower() or "greenhouse" in src.lower() or "international" in src.lower()
+    to_addr = emails[0] if emails else ""
+    is_intl = is_international(src)
     model = "2" if is_intl else "1"
     subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
-    pdf_path = PDF_EN if is_intl else PDF_PT
+    pdf_path = config.PDF_EN if is_intl else config.PDF_PT
+    return to_addr, subj, body, pdf_path
+
+
+def _print_draft_hint(lid):
+    print(f"{Color.YELLOW}📝 Lead #{lid} marcado como '{DRAFT_STATUS}'. Depois de enviar de fato, rode:{Color.RESET}")
+    print(f"   python3 prospector.py update {lid} mensagem_enviada\n")
+
+
+def send_smtp(lead, user, password, allow_no_attachment=False):
+    """Envia o e-mail via SMTP do Gmail com o PDF correspondente anexado."""
+    lid, comp = lead[0], lead[1]
+    to_addr, subj, body, pdf_path = prepare_message(lead)
+    if not to_addr:
+        print(f"{Color.RED}❌ Lead #{lid} não possui e-mail direto cadastrado.{Color.RESET}")
+        return False
+
+    has_pdf = os.path.exists(pdf_path)
+    if not has_pdf and not allow_no_attachment:
+        print(f"{Color.RED}❌ Currículo não encontrado: {pdf_path}{Color.RESET}")
+        print(f"   Coloque o PDF em data/ (ou na raiz) ou use --sem-anexo para enviar mesmo assim. Nada foi enviado.")
+        return False
 
     print(f"\n{Color.CYAN}📨 Preparando envio para:{Color.RESET} {to_addr}")
     print(f"🏢 Empresa: {comp} | Assunto: {subj}")
-    print(f"📎 Anexo: {os.path.basename(pdf_path)}")
+    print(f"📎 Anexo: {os.path.basename(pdf_path) if has_pdf else 'NENHUM (--sem-anexo)'}")
 
     msg = MIMEMultipart()
     msg["From"] = f"Raphael Ramos <{user}>"
@@ -36,7 +58,7 @@ def send_smtp(lead, user, password):
     msg["Subject"] = subj
     msg.attach(MIMEText(body, "plain", "utf-8"))
 
-    if os.path.exists(pdf_path):
+    if has_pdf:
         with open(pdf_path, "rb") as f:
             part = MIMEApplication(f.read(), Name=os.path.basename(pdf_path))
             part["Content-Disposition"] = f'attachment; filename="{os.path.basename(pdf_path)}"'
@@ -58,29 +80,21 @@ def send_smtp(lead, user, password):
         return False
 
 def open_gmail_web(lead):
-    """Abre o Gmail Web no navegador com campos preenchidos."""
-    lid, comp, title, src, url, contact, raw_body, status = lead
-    emails = re.findall(EMAIL_REGEX, contact or "")
-    to_addr = emails[0] if emails else ""
-    is_intl = "hacker news" in src.lower() or "greenhouse" in src.lower()
-    model = "2" if is_intl else "1"
-    subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
+    """Abre o Gmail Web no navegador com campos preenchidos (o anexo é manual)."""
+    lid = lead[0]
+    to_addr, subj, body, pdf_path = prepare_message(lead)
 
     gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={urllib.parse.quote(to_addr)}&su={urllib.parse.quote(subj)}&body={urllib.parse.quote(body)}"
     print(f"{Color.GREEN}🚀 Abrindo Gmail Web com e-mail preenchido...{Color.RESET}")
+    print(f"📎 Anexe manualmente: {pdf_path}" + ("" if os.path.exists(pdf_path) else f" {Color.RED}(arquivo não encontrado){Color.RESET}"))
     subprocess.run(["open", gmail_url])
-    update_status(lid, "mensagem_enviada")
-    print(f"{Color.GREEN}✅ Lead #{lid} atualizado para 'mensagem_enviada'!{Color.RESET}\n")
+    update_status(lid, DRAFT_STATUS)
+    _print_draft_hint(lid)
 
 def create_eml_draft(lead):
     """Gera um arquivo .eml com o PDF anexado e abre no aplicativo padrão."""
-    lid, comp, title, src, url, contact, raw_body, status = lead
-    emails = re.findall(EMAIL_REGEX, contact or "")
-    to_addr = emails[0] if emails else ""
-    is_intl = "hacker news" in src.lower() or "greenhouse" in src.lower()
-    model = "2" if is_intl else "1"
-    subj, body = get_message_content(model, nome="Team", empresa=comp, vaga=title)
-    pdf_path = PDF_EN if is_intl else PDF_PT
+    lid = lead[0]
+    to_addr, subj, body, pdf_path = prepare_message(lead)
 
     msg = MIMEMultipart()
     msg["From"] = "Raphael Ramos <raphaelramosc@gmail.com>"
@@ -93,12 +107,14 @@ def create_eml_draft(lead):
             part = MIMEApplication(f.read(), Name=os.path.basename(pdf_path))
             part["Content-Disposition"] = f'attachment; filename="{os.path.basename(pdf_path)}"'
             msg.attach(part)
+    else:
+        print(f"{Color.YELLOW}⚠️ Currículo não encontrado ({pdf_path}); rascunho gerado sem anexo.{Color.RESET}")
 
-    eml_file = os.path.join(BASE_DIR, f"draft_lead_{lid}.eml")
+    eml_file = os.path.join(config.ensure_output_dir(), f"draft_lead_{lid}.eml")
     with open(eml_file, "w", encoding="utf-8") as f:
         f.write(msg.as_string())
 
     print(f"{Color.GREEN}📄 Rascunho gerado em: {eml_file}{Color.RESET}")
     subprocess.run(["open", eml_file])
-    update_status(lid, "mensagem_enviada")
-    print(f"{Color.GREEN}✅ Lead #{lid} atualizado para 'mensagem_enviada'!{Color.RESET}\n")
+    update_status(lid, DRAFT_STATUS)
+    _print_draft_hint(lid)

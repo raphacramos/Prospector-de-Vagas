@@ -7,7 +7,7 @@ GREENHOUSE_COMPANIES = [
     "elastic", "posthog", "supabase", "cloudflare"
 ]
 
-def mine_greenhouse(query="Python", companies=None):
+def mine_greenhouse(query=None, companies=None):
     if companies is None:
         companies = GREENHOUSE_COMPANIES
     print(f"{Color.CYAN}🔍 Minerando APIs públicas de ATS Ágeis (Greenhouse Startups & Tech)...{Color.RESET}")
@@ -30,6 +30,8 @@ def mine_greenhouse(query="Python", companies=None):
             is_non_eng = any(k in title_lower for k in ["counsel", "account executive", "recruiter", "marketing", "sales", "finance", "analyst"])
 
             if not is_eng or is_non_eng:
+                continue
+            if query and query.lower() not in title_lower:
                 continue
 
             results.append({

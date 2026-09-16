@@ -27,3 +27,7 @@ venv/
 
 # ECC (estado local do instalador, contem caminhos absolutos da maquina)
 .claude/ecc/install-state.json
+
+# Dados pessoais e saidas geradas (curriculos base, PDFs calibrados, rascunhos)
+data/
+curriculo_tailored_*.html
