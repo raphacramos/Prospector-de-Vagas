@@ -5,6 +5,28 @@
   "links": ["linkedin.com/in/raphael-c-1a7430108", "github.com/raphacramos"],
   "max_caracteres_mensagem": 400,
 
+  "candidato": {
+    "telefone": "",
+    "cidade": "Campina Grande, PB, Brasil",
+    "linkedin": "https://www.linkedin.com/in/raphael-c-1a7430108",
+    "github": "https://github.com/raphacramos",
+    "site": "",
+    "_comentario": "Respostas usadas no preenchimento dos formulários. Deixe vazio o que não quiser responder automaticamente.",
+    "respostas_padrao": {
+      "autorizado a trabalhar nos EUA": "No",
+      "precisa de patrocínio de visto": "Yes",
+      "disponibilidade para começar": "",
+      "pretensão salarial": "",
+      "como soube da vaga": "Company careers page"
+    }
+  },
+
+  "ia": {
+    "modelo": "claude-sonnet-5",
+    "max_bullets_por_experiencia": 4,
+    "curriculo_mestre": "resume.json"
+  },
+
   "curriculos": {
     "html_en": "curriculo_en.html",
     "html_pt": "curriculo_pt_destaque.html",

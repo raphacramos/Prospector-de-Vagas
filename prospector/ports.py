@@ -42,3 +42,13 @@ class LeadRepository(Protocol):
     def set_status(self, lead_id: int, status, note: str = "") -> bool: ...
     def pending_followups(self) -> List: ...
     def events(self, lead_id: int) -> List[dict]: ...
+
+
+class LlmError(Exception):
+    """Falha ao chamar o modelo (chave ausente, limite, resposta invalida)."""
+
+
+class LlmClient(Protocol):
+    def generate_json(self, system: str, content: list, schema: dict, tool_name: str,
+                      max_tokens: int = 4096) -> dict:
+        """Envia `content` (blocos de texto/documento) e devolve o JSON validado pelo `schema`."""

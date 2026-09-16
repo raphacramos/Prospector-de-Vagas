@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta
 
 from prospector.domain.lead import (
-    AWAITING_REPLY, FOLLOWUP_DAYS, Lead, LeadStatus, region_from_source,
+    AWAITING_REPLY, FOLLOWUP_DAYS, POSITIVE, Lead, LeadStatus, region_from_source,
 )
 
 SCHEMA_VERSION = 3
@@ -274,8 +274,9 @@ class SqliteLeadRepository:
             return [dict(r) for r in conn.execute("""
                 SELECT l.source AS source, l.id AS lead_id, l.status AS status,
                        EXISTS(SELECT 1 FROM lead_events e WHERE e.lead_id = l.id
-                              AND e.status IN ('conexao_enviada','mensagem_enviada','aguardando_followup')) AS contacted,
+                              AND e.status IN ({contacted})) AS contacted,
                        EXISTS(SELECT 1 FROM lead_events e WHERE e.lead_id = l.id
-                              AND e.status IN ('resposta','entrevista')) AS replied
+                              AND e.status IN ({replied})) AS replied
                 FROM leads l
-            """)]
+            """.format(contacted=",".join("?" for _ in AWAITING_REPLY), replied=",".join("?" for _ in POSITIVE)),
+                [s.value for s in AWAITING_REPLY] + [s.value for s in POSITIVE])]

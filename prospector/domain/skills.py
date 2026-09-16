@@ -50,6 +50,50 @@ CASE_SENSITIVE_SKILLS = {
     "Go": [r"\bGo\b(?!\s+(?:to|above|beyond|ahead|back|through|live|over|further)\b)"],
 }
 
+# Sinonimos em portugues: um CV-mestre em pt comprova o que o CV adaptado diz em ingles.
+PT_PATTERNS = {
+    "SQL & Relational DBs": [r"\bbancos? de dados relaciona(l|is)\b"],
+    "Distributed Systems": [r"\bsistemas distribu[ií]dos\b"],
+    "High Throughput & Concurrency": [r"\bconcorr[eê]ncia\b", r"\balta vaz[aã]o\b", r"\bparalelismo\b", r"\bbaixa lat[eê]ncia\b"],
+    "Clean Architecture & Design": [r"\barquitetura limpa\b", r"\bpadr[oõ]es de projeto\b"],
+    "Data Pipelines & Telemetry": [r"\bpipelines? de dados\b", r"\btelemetria\b", r"\bprocessamento de sinais\b", r"\bs[eé]ries temporais\b"],
+    "Machine Learning & AI": [r"\baprendizado de m[aá]quina\b", r"\bintelig[eê]ncia artificial\b"],
+    "Algorithms & Data Structures": [r"\balgoritmos?\b", r"\bestruturas? de dados\b"],
+    "Linux & Internals": [r"\bsistemas operacionais\b"],
+    "Computer Networks": [r"\bredes de computadores\b", r"\bprotocolos de rede\b"],
+    "Docker & Containers": [r"\bcont[eê]ineres\b"],
+    "Git & CI/CD": [r"\bintegra[cç][aã]o cont[ií]nua\b"],
+}
+for _name, _pats in PT_PATTERNS.items():
+    CANONICAL_SKILLS[_name] = CANONICAL_SKILLS[_name] + _pats
+
+# Tecnologias fora da taxonomia, usadas para detectar termos inventados no texto adaptado.
+TECH_TERMS = [
+    "kafka", "rabbitmq", "kubernetes", "k8s", "terraform", "ansible", "aws", "gcp", "azure", "lambda",
+    "s3", "ec2", "bigquery", "snowflake", "databricks", "spark", "pyspark", "hadoop", "airflow", "dbt",
+    "flink", "elasticsearch", "opensearch", "clickhouse", "cassandra", "dynamodb", "mysql", "sqlite",
+    "graphql", "grpc", "kotlin", "scala", "ruby", "rails", "php", "laravel", "swift", "elixir", "haskell",
+    "typescript", "javascript", "react", "vue", "angular", "next.js", "node.js", "django", "flask",
+    "fastapi", "spring", "celery", "pandas", "numpy", "pytorch", "tensorflow", "scikit-learn", "llm",
+    "langchain", "openai", "prometheus", "grafana", "datadog", "jenkins", "github actions", "gitlab ci",
+    "circleci", "helm", "istio", "nginx", "redis", "mongodb", "postgresql", "docker", "linux", "go",
+    "golang", "rust", "java", "c++", "c#", ".net", "tableau", "power bi", "looker", "sap", "salesforce",
+]
+
+
+def mentioned_terms(text, terms=TECH_TERMS):
+    low = (text or "").lower()
+    found = set()
+    for t in terms:
+        if t == "go":
+            if re.search(r"\bGo\b(?!\s+(?:to|above|beyond|ahead|back|through))", text or "") or "golang" in low:
+                found.add(t)
+            continue
+        if re.search(r"(?<![\w+#.])" + re.escape(t) + r"(?![\w+#])", low):
+            found.add(t)
+    return found
+
+
 STOPWORDS = {
     "the", "and", "a", "to", "in", "of", "with", "is", "for", "on", "that", "as", "be", "at", "by",
     "this", "we", "are", "you", "will", "our", "an", "or", "from", "your", "have", "all", "can",

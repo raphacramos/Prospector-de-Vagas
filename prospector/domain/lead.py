@@ -13,6 +13,8 @@ class Region(str, Enum):
 class LeadStatus(str, Enum):
     MINERADO = "minerado"
     RASCUNHO_ABERTO = "rascunho_aberto"
+    CANDIDATURA_PREPARADA = "candidatura_preparada"
+    CANDIDATURA_ENVIADA = "candidatura_enviada"
     CONEXAO_ENVIADA = "conexao_enviada"
     MENSAGEM_ENVIADA = "mensagem_enviada"
     AGUARDANDO_FOLLOWUP = "aguardando_followup"
@@ -27,6 +29,7 @@ class LeadStatus(str, Enum):
 
 # Status em que ja houve contato e esperamos resposta (contam para o follow-up).
 AWAITING_REPLY = frozenset({
+    LeadStatus.CANDIDATURA_ENVIADA,
     LeadStatus.CONEXAO_ENVIADA,
     LeadStatus.MENSAGEM_ENVIADA,
     LeadStatus.AGUARDANDO_FOLLOWUP,

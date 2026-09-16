@@ -43,7 +43,35 @@ class Profile:
     max_caracteres_mensagem: int = 400
     chrome_path: str = ""
     fontes: Dict[str, List[str]] = field(default_factory=dict)
+    candidato: Dict[str, object] = field(default_factory=dict)
+    ia: Dict[str, object] = field(default_factory=dict)
     path: str = ""
+
+    @property
+    def first_name(self):
+        return self.nome.split()[0] if self.nome.strip() else ""
+
+    @property
+    def last_name(self):
+        parts = self.nome.split()
+        return " ".join(parts[1:]) if len(parts) > 1 else ""
+
+    @property
+    def model(self):
+        return str(self.ia.get("modelo") or "")
+
+    @property
+    def max_bullets(self):
+        return int(self.ia.get("max_bullets_por_experiencia") or 4)
+
+    @property
+    def master_resume_path(self):
+        name = str(self.ia.get("curriculo_mestre") or "resume.json")
+        return name if os.path.isabs(name) else os.path.join(config.DATA_DIR, name)
+
+    @property
+    def standard_answers(self):
+        return dict(self.candidato.get("respostas_padrao") or {})
 
     @property
     def assinatura(self):
@@ -101,5 +129,6 @@ def load_profile(path=None):
         headline_cv=data.get("headline_cv", "Software Engineer | {destaques}"),
         destaques_padrao=data.get("destaques_padrao", "Backend"),
         max_caracteres_mensagem=int(data.get("max_caracteres_mensagem", 400)),
-        chrome_path=data.get("chrome_path", ""), fontes=dict(data.get("fontes", {})), path=path,
+        chrome_path=data.get("chrome_path", ""), fontes=dict(data.get("fontes", {})),
+        candidato=dict(data.get("candidato", {})), ia=dict(data.get("ia", {})), path=path,
     )

@@ -31,3 +31,6 @@ venv/
 # Dados pessoais e saidas geradas (curriculos base, PDFs calibrados, rascunhos)
 data/
 curriculo_tailored_*.html
+
+# Arquivos criados pelo app do Claude
+Claude outputs/
