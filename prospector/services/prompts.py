@@ -56,6 +56,11 @@ TAILOR_SCHEMA = {
         "missing_requirements": _STR_LIST,
         "cover_letter": _STR,
         "fit_summary": _STR,
+        "role_titles": {"type": "array", "items": {"type": "object", "required": ["id", "text"],
+                        "properties": {"id": _STR, "text": _STR}}},
+        "education_titles": {"type": "array", "items": {"type": "object", "required": ["id", "text"],
+                             "properties": {"id": _STR, "text": _STR}}},
+        "languages": _STR_LIST,
     },
 }
 
@@ -78,6 +83,7 @@ Objetivo:
 - `keywords_used`: termos da vaga que o currículo adaptado cobre de fato.
 - `cover_letter`: carta curta (até 170 palavras), sem clichês, citando a empresa e 2 evidências concretas do CV. Sem cabeçalho de endereço. Assine com o nome do candidato.
 - `fit_summary`: uma frase honesta sobre a aderência (para o candidato, não para a empresa).
+- Só quando o idioma de saída for diferente do `language` do CV-mestre: traduza fielmente os cargos em `role_titles` (id da experiência + cargo traduzido), os cursos em `education_titles` (id da formação + curso traduzido) e a lista `languages` (mesma quantidade e ordem do mestre). Nomes de empresas e instituições não são traduzidos.
 - O currículo deve caber em uma página A4."""
 
 ANSWERS_SCHEMA = {

@@ -1,0 +1,3 @@
+# O Prospector roda só com a biblioteca padrão do Python.
+# Opcional: preenchimento automático dos formulários (usa o Chrome já instalado).
+playwright>=1.40

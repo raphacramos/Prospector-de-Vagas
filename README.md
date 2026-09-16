@@ -19,6 +19,55 @@ O **Prospector de Vagas** reverte essa dinâmica através de:
 
 ---
 
+## ⚡ Candidaturas rápidas (estilo AIApply)
+
+O fluxo para aplicar em várias vagas com o currículo adaptado a cada uma:
+
+1. **Buscar** vagas (`mine` ou o botão *Buscar vagas*).
+2. **Priorizar:** a fila mostra primeiro as vagas com link de ATS ou e-mail e maior aderência ao seu CV.
+3. **Preparar:** a IA lê a vaga e monta, a partir do seu CV-mestre, um currículo adaptado (resumo, ordem e texto dos bullets, skills), uma carta curta e o PDF. Dá para preparar várias vagas de uma vez.
+4. **Aplicar:** o Chrome abre o formulário do Greenhouse, Lever ou Ashby já preenchido, com CV e carta anexados. Perguntas abertas são respondidas pela IA quando ela tem base para isso. O que precisa de você fica destacado em laranja.
+5. **Enviar:** você revisa e clica em enviar no site. O Prospector nunca envia sozinho.
+6. **Marcar enviada:** o follow-up e as métricas passam a contar a vaga.
+
+**O que a IA não faz:** inventar. Empresas, cargos, datas e formação vêm sempre do CV-mestre (a IA só traduz cargos e cursos quando o CV sai em outro idioma). Experiências, bullets e skills que não existem no mestre são removidos, e tecnologias citadas sem comprovação aparecem como aviso. O que a vaga pede e você não tem vira **lacuna** no painel.
+
+### Configuração (uma vez)
+
+```bash
+# 1. Chave da API da Anthropic (console.anthropic.com), no arquivo .env da raiz
+echo 'ANTHROPIC_API_KEY=sua-chave' >> .env
+
+# 2. Perfil com seus dados, respostas padrão e idioma
+mkdir -p data && cp profile.example.json data/profile.json   # edite "candidato" e "ia"
+
+# 3. CV-mestre a partir do seu currículo (PDF, DOCX, TXT ou MD)
+python3 prospector.py importar-cv ~/Downloads/meu-curriculo.pdf   # revise data/resume.json
+
+# 4. Opcional: preenchimento automático dos formulários (usa o Chrome instalado)
+pip3 install -r requirements-opcional.txt
+
+# 5. Painel
+python3 prospector.py painel
+```
+
+O painel abre em `http://127.0.0.1:8765` com um token da sessão e só aceita conexões deste computador. Atalhos: <kbd>j</kbd>/<kbd>k</kbd> navegam, <kbd>p</kbd> prepara, <kbd>a</kbd> aplica, <kbd>e</kbd> marca como enviada, <kbd>d</kbd> descarta e <kbd>/</kbd> busca.
+
+Os mesmos passos existem no terminal:
+
+```bash
+python3 prospector.py preparar 12 15 18            # uma ou várias vagas
+python3 prospector.py aplicar 12                   # abre o formulário preenchido e pergunta se você enviou
+```
+
+**Custo:** com o modelo padrão (`claude-sonnet-5`, US$ 2 por milhão de tokens de entrada e US$ 10 por milhão de saída na tabela da Anthropic), cada vaga preparada usa em geral 5 a 9 mil tokens de entrada e 1,5 a 2,5 mil de saída, cerca de US$ 0,03 a 0,05. O painel mostra os tokens de cada candidatura. Para trocar o modelo, altere `ia.modelo` no perfil.
+
+**Arquivos gerados** em `data/applications/<id>-<empresa>/`: `cv.html`, o PDF, `carta.txt`, `vaga.txt`, `tailored.json` (o que a IA escolheu) e `meta.json`.
+
+**Chrome do Prospector:** o preenchimento usa um perfil próprio em `data/browser-profile`. Se um ATS pedir login, entre uma vez nessa janela e o login fica salvo.
+
+---
+
 ## 🏗️ Arquitetura (v3)
 
 As regras de negócio ficam em `domain/` e `services/` e não conhecem terminal, SQLite ou HTTP. Tudo que faz I/O fica em `adapters/`, atrás dos contratos de `ports.py`. A revisão que levou a essa estrutura está em [`docs/arquitetura/001-revisao-e-plano-v3.md`](docs/arquitetura/001-revisao-e-plano-v3.md).
@@ -26,30 +75,42 @@ As regras de negócio ficam em `domain/` e `services/` e não conhecem terminal,
 ```text
 Prospector-de-Vagas/
 ├── prospector.py                 # Ponto de entrada (python3 prospector.py ...)
-├── profile.example.json          # Perfil de exemplo: dados pessoais, templates, skills, fontes
+├── profile.example.json          # Perfil de exemplo: dados pessoais, templates, skills, fontes, IA
+├── requirements-opcional.txt     # Playwright (preenchimento automático, opcional)
 ├── prospector/
 │   ├── cli.py                    # argparse + apresentação no terminal
-│   ├── ports.py                  # Contratos: Miner, HttpClient, LeadRepository, MiningOptions
+│   ├── container.py              # Monta as peças para o CLI e o painel
+│   ├── ports.py                  # Contratos: Miner, HttpClient, LeadRepository, LlmClient
 │   ├── profile.py                # Carrega o perfil (data/profile.json ou o exemplo)
 │   ├── domain/
 │   │   ├── lead.py               # Lead, LeadStatus, Region (define idioma de mensagem e CV)
+│   │   ├── resume.py             # CV-mestre, CV adaptado e checagem de fidelidade
 │   │   └── skills.py             # Taxonomia de competências e similaridade
 │   ├── services/
 │   │   ├── mining.py             # Roda as fontes, isola falhas, deduplica e salva
 │   │   ├── outreach.py           # Monta a mensagem certa e registra no funil
-│   │   ├── tailoring.py          # Compara CV x vaga e gera o CV calibrado
+│   │   ├── tailoring.py          # Compara CV x vaga sem IA (comando tailor)
+│   │   ├── application.py        # Pacote de candidatura com IA (CV, carta, PDF, respostas)
+│   │   ├── apply_flow.py         # Abre o formulário preenchido
+│   │   ├── resume_import.py      # PDF/DOCX -> CV-mestre
+│   │   ├── ranking.py            # Ordem da fila
 │   │   └── funnel.py             # Métricas por fonte
 │   ├── adapters/
+│   │   ├── llm_anthropic.py      # API do Claude (JSON estruturado via tool use)
+│   │   ├── autofill/             # Leitura e preenchimento de formulários (Playwright opcional)
 │   │   ├── miners/               # github, hacker_news, greenhouse, lever, ashby, simplify
 │   │   ├── storage/sqlite.py     # Repositório + migração automática de schema
 │   │   ├── senders.py            # SMTP, Gmail Web e rascunho .eml
 │   │   ├── http.py               # urllib com TLS verificado
 │   │   ├── jd_fetcher.py         # Descrição da vaga (Greenhouse, Lever, Ashby, JSON-LD)
+│   │   ├── resume_files.py       # Leitura de PDF/DOCX para importar o CV
+│   │   ├── resume_render.py      # CV adaptado em HTML A4
 │   │   └── pdf_chrome.py         # HTML -> PDF com Chrome/Chromium headless
+│   ├── web/                      # Painel local (server.py + static/index.html)
 │   └── core/                     # config (caminhos, .env, cores) e fábrica do repositório
-├── tests/                        # unittest + respostas gravadas das fontes (sem rede)
+├── tests/                        # unittest + respostas gravadas, IA falsa e formulários de teste
 ├── docs/arquitetura/             # Decisões e roadmap
-└── data/                         # (fora do git) banco, perfil, currículos, saídas e backups
+└── data/                         # (fora do git) banco, perfil, CV-mestre, candidaturas, backups
 ```
 
 ---
@@ -75,6 +136,8 @@ Variáveis de ambiente opcionais:
 | `GITHUB_TOKEN` | Aumentar o limite da API do GitHub (60 req/h sem token) |
 | `CHROME_PATH` | Caminho do Chrome/Chromium, se não for detectado |
 | `PROSPECTOR_DEBUG=1` | Mostrar erros de rede no terminal |
+| `ANTHROPIC_API_KEY` | Chave da API do Claude (preparar candidaturas e importar o CV) |
+| `PROSPECTOR_MODEL` | Trocar o modelo da IA sem editar o perfil |
 
 **Atualizando da v2:** na primeira execução, o banco antigo é migrado para o schema v3 automaticamente. Antes disso, uma cópia é salva em `data/backups/`.
 
@@ -145,7 +208,7 @@ Toda mudança de status fica registrada no histórico (`lead_events`), e o `stat
 python3 -m unittest discover -s tests -v
 ```
 
-Os testes usam respostas gravadas das fontes (`tests/fixtures/`) e um SMTP falso. Nenhum teste acessa a rede, envia e-mail ou toca no seu `prospector.db`.
+Os testes usam respostas gravadas das fontes (`tests/fixtures/`), uma IA falsa e um SMTP falso. Nenhum teste acessa a internet, gasta créditos da IA, envia e-mail ou toca no seu `prospector.db`. Os testes de preenchimento com navegador só rodam quando o Playwright e um Chromium estão instalados (`python3 -m playwright install chromium`).
 
 ## 🤖 Apoio de IA
 

@@ -135,7 +135,7 @@ class ApplicationService:
         after = dict(getattr(self.llm, "usage", {}) or {})
         usage = {k: after.get(k, 0) - before.get(k, 0) for k in after}
 
-        tailored = TailoredResume.from_dict({**data, "language": language})
+        tailored = TailoredResume.from_dict({**data, "language": language, "warnings": []})
         for item in tailored.experiences:
             item.bullets = item.bullets[: self.profile.max_bullets]
         enforce_faithfulness(master, tailored)

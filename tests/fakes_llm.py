@@ -55,4 +55,7 @@ TAILORED = {
     "missing_requirements": ["Kafka"],
     "cover_letter": "Hi team, I built Python telemetry pipelines... Raphael Ramos",
     "fit_summary": "Boa aderência em Python; falta Kafka.",
+    "role_titles": [{"id": "exp1", "text": "Researcher"}, {"id": "exp2", "text": "Data Structures TA"}],
+    "education_titles": [{"id": "edu1", "text": "B.Sc. in Computer Science"}],
+    "languages": ["Portuguese (native)", "English (fluent)"],
 }

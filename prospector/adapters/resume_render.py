@@ -31,6 +31,7 @@ ul { margin: 2pt 0 0; padding-left: 12pt; }
 li { margin: 1pt 0; }
 p { margin: 0; }
 .skills { font-size: 9.2pt; }
+@media screen { body { max-width: 190mm; margin: 0 auto; padding: 14mm 12mm; } }
 """
 
 

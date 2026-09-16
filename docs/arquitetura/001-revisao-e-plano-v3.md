@@ -123,3 +123,30 @@ Ficam como pendências:
 - **Templates:** continuam com mais de 400 caracteres. O `show` agora avisa, mas o texto é decisão do autor.
 - **Nomes de empresa no GitHub:** a extração do título é heurística. Quando falha, o lead recebe o label `empresa-nao-identificada` e o `show` avisa.
 - **`From` do rascunho `.eml`:** usa o nome e o e-mail do perfil, enquanto o SMTP usa `EMAIL_USER`. Se forem contas diferentes, alinhe as duas.
+
+## 7. Candidaturas rápidas (v3.1)
+
+**Objetivo:** aplicar em muitas vagas com o currículo adaptado a cada uma, no estilo do AIApply, sem os dois problemas mais citados nas avaliações desse produto: candidaturas para vagas erradas e texto genérico ou inventado.
+
+**Decisões:**
+
+| Decisão | Motivo |
+|---|---|
+| Você clica em enviar | Evita CAPTCHAs e regras dos sites contra envio automatizado, e você vê cada candidatura antes. Leva uns 30 s por vaga. |
+| CV-mestre estruturado (`data/resume.json`) com ids | A IA só referencia ids existentes; empresas e datas nunca saem da IA (cargos e cursos só são traduzidos). |
+| Checagem de fidelidade no código, não só no prompt | `enforce_faithfulness` remove itens inexistentes e marca tecnologias sem comprovação, mesmo se o modelo errar. |
+| API do Claude via `urllib`, JSON por tool use | Mantém o núcleo sem dependências; o schema é validado na resposta. |
+| Playwright opcional, com o Chrome instalado e perfil próprio | Não baixa navegador; logins em ATS ficam salvos; o resto do sistema funciona sem ele. |
+| Preenchimento pelo rótulo do campo | Funciona em Greenhouse, Lever, Ashby e formulários genéricos. Comboboxes, radios e selects ficam para você, porque escolher a opção errada é pior que deixar em branco. |
+| Painel com a biblioteca padrão (`http.server`) | Só escuta em 127.0.0.1, exige token por sessão e confere o `Host` (proteção contra DNS rebinding). |
+
+**Fluxo:** fila (`ranking`) → `ApplicationService.prepare` (descrição da vaga → IA → fidelidade → HTML/PDF → `data/applications/`) → `ApplyFlow` (worker do Playwright numa thread própria → `fill_page`) → você envia → `candidatura_enviada` (entra no follow-up e no `stats`).
+
+**Validação:** a leitura dos campos foi conferida, sem enviar nada, em formulários reais do Greenhouse (GitLab), Lever (Spotify) e Ashby (Supabase), e o preenchimento é testado num Chromium contra cópias desses formatos.
+
+**Pendências:**
+
+- **Respostas de seleção:** preencher selects e radios de sim/não a partir de `respostas_padrao` quando a correspondência for exata.
+- **Carta de apresentação:** gerar a carta em PDF para ATS que não aceitam `.txt`.
+- **Workday:** não é suportado (o projeto filtra essas vagas).
+- **Teste com a API real:** a chamada à API do Claude segue a documentação e foi testada com respostas simuladas; a primeira execução real acontece quando a chave estiver no `.env`.

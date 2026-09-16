@@ -92,6 +92,24 @@ class FaithfulnessTest(unittest.TestCase):
         self.assertNotIn("Otimizei algoritmos", html)  # bullet nao escolhido fica fora
         self.assertIn("Projeto BINGO", html)
 
+    def test_traducao_de_cargos_datas_e_idiomas(self):
+        t = enforce_faithfulness(master(), self.tailored())
+        html = render_html(resolve(master(), t))
+        for text in ("Researcher", "2021 – Present", "B.Sc. in Computer Science", "English (fluent)", "UFCG"):
+            self.assertIn(text, html)
+        self.assertNotIn("Pesquisador", html)
+        self.assertNotIn("Atual", html)
+
+    def test_traducao_ignorada_no_mesmo_idioma_e_idiomas_incompletos(self):
+        pt = TailoredResume.from_dict({**copy.deepcopy(TAILORED), "language": "pt"})
+        enforce_faithfulness(master(), pt)
+        self.assertEqual((pt.role_titles, pt.languages), ({}, []))
+        bad = self.tailored(languages=["English"], role_titles=[{"id": "exp7", "text": "CEO"}])
+        enforce_faithfulness(master(), bad)
+        self.assertEqual(bad.languages, [])
+        self.assertEqual(bad.role_titles, {})
+        self.assertTrue(any("idiomas" in w for w in bad.warnings))
+
     def test_untailored_em_portugues(self):
         html = render_html(resolve(master(), untailored(master())))
         self.assertIn("<h2>Experiência</h2>", html)

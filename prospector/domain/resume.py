@@ -4,7 +4,7 @@ A IA nunca escreve empresas, cargos ou datas: eles vem sempre do CV-mestre. Ela 
 quais itens entram, em que ordem, e reescreve o texto de bullets que existem no mestre.
 """
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Dict, List, Optional
 
 from prospector.domain.skills import extract_canonical_skills, mentioned_terms
@@ -177,6 +177,10 @@ class TailoredResume:
     skills: List[str]
     keywords_used: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
+    # traducoes (so quando o idioma de saida difere do mestre)
+    role_titles: Dict[str, str] = field(default_factory=dict)
+    education_titles: Dict[str, str] = field(default_factory=dict)
+    languages: List[str] = field(default_factory=list)
 
     def to_dict(self):
         return asdict(self)
@@ -186,11 +190,19 @@ class TailoredResume:
         def items(key):
             return [TailoredItem(id=i["id"], bullets=[Bullet(**b) for b in i.get("bullets", [])])
                     for i in data.get(key, [])]
+
+        def titles(key):
+            value = data.get(key) or {}
+            if isinstance(value, list):  # formato da IA: [{id, text}]
+                value = {t["id"]: t["text"] for t in value if t.get("id") and t.get("text")}
+            return dict(value)
         return cls(language=data.get("language", "en"), headline=data.get("headline", ""),
                    summary=data.get("summary", ""), experiences=items("experiences"),
                    projects=items("projects"), skills=list(data.get("skills", [])),
                    keywords_used=list(data.get("keywords_used", [])),
-                   warnings=list(data.get("warnings", [])))
+                   warnings=list(data.get("warnings", [])),
+                   role_titles=titles("role_titles"), education_titles=titles("education_titles"),
+                   languages=list(data.get("languages", [])))
 
 
 _WORD = re.compile(r"[A-Za-z][A-Za-z0-9+#.\-]*[A-Za-z0-9+#]")
@@ -234,6 +246,16 @@ def enforce_faithfulness(master, tailored):
     tailored.experiences = clean_items(tailored.experiences, exp_ids, "experiência")
     tailored.projects = clean_items(tailored.projects, proj_ids, "projeto")
 
+    if tailored.language == master.language:
+        tailored.role_titles, tailored.education_titles, tailored.languages = {}, {}, []
+    else:
+        tailored.role_titles = {k: v for k, v in tailored.role_titles.items() if k in exp_ids}
+        edu_ids = {e.id for e in master.education}
+        tailored.education_titles = {k: v for k, v in tailored.education_titles.items() if k in edu_ids}
+        if tailored.languages and len(tailored.languages) != len(master.languages):
+            warnings.append("tradução dos idiomas descartada (quantidade diferente do CV-mestre)")
+            tailored.languages = []
+
     master_text = _norm(master.all_text())
     master_skill_names = {_norm(s) for s in master.skills}
     kept_skills = []
@@ -262,19 +284,37 @@ def unproven_terms(master, text):
     return out
 
 
+CURRENT_WORDS = {"en": "Present", "pt": "Atual"}
+_CURRENT = re.compile(r"^\s*(atual|atualmente|presente|o momento|present|current|now|today)\s*$", re.I)
+
+
+def localize_date(value, language):
+    if value and _CURRENT.match(value) and language in CURRENT_WORDS:
+        return CURRENT_WORDS[language]
+    return value
+
+
 def resolve(master, tailored):
     """Junta o adaptado com os dados fixos do mestre para renderizar."""
+    lang = tailored.language
     exp_by_id = {e.id: e for e in master.experiences}
     proj_by_id = {p.id: p for p in master.projects}
+
+    def exp_view(e):
+        return replace(e, role=tailored.role_titles.get(e.id) or e.role,
+                       start=localize_date(e.start, lang), end=localize_date(e.end, lang))
+
+    education = [replace(ed, degree=tailored.education_titles.get(ed.id) or ed.degree,
+                         end=localize_date(ed.end, lang)) for ed in master.education]
     return {
         "contact": master.contact,
         "headline": tailored.headline or master.headline,
         "summary": tailored.summary or master.summary,
-        "experiences": [(exp_by_id[i.id], i.bullets) for i in tailored.experiences if i.id in exp_by_id],
+        "experiences": [(exp_view(exp_by_id[i.id]), i.bullets) for i in tailored.experiences if i.id in exp_by_id],
         "projects": [(proj_by_id[i.id], i.bullets) for i in tailored.projects if i.id in proj_by_id],
-        "education": master.education,
+        "education": education,
         "skills": tailored.skills or master.skills,
-        "languages": master.languages,
+        "languages": tailored.languages or master.languages,
         "certifications": master.certifications,
         "language": tailored.language,
     }
