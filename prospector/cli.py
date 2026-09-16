@@ -336,7 +336,7 @@ def cmd_panel(args, repo):
         print(f"{Color.RED}❌ Não consegui abrir a porta {args.porta}: {e}. Use --porta.{Color.RESET}")
         return
     url = f"http://127.0.0.1:{httpd.server_address[1]}/?token={app.token}"
-    print(f"{Color.GREEN}{Color.BOLD}🖥️ Painel em {url}{Color.RESET}")
+    print(f"{Color.GREEN}{Color.BOLD}🖥️ Painel em {url}{Color.RESET}", flush=True)
     print(f"{Color.DIM}Só funciona neste computador. Ctrl+C para encerrar.{Color.RESET}")
     if not args.sem_navegador:
         webbrowser.open(url)
