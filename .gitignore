@@ -24,3 +24,6 @@ venv/
 *.swo
 *.eml
 .env
+
+# ECC (estado local do instalador, contem caminhos absolutos da maquina)
+.claude/ecc/install-state.json
