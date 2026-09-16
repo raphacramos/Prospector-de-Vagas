@@ -52,6 +52,8 @@
   "_comentario_skills": "Liste só o que você sustenta numa entrevista. O tailor nunca adiciona ao CV algo fora de 'skills' + 'palavras_opcionais_cv'.",
   "palavras_opcionais_cv": [],
   "ancora_insercao_cv": "Docker, Git,",
+  "headline_cv": "Software Engineer | Backend & Data Systems | Python, Linux, {destaques}",
+  "destaques_padrao": "Distributed Telemetry, Clean Architecture",
 
   "chrome_path": "",
 

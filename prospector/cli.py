@@ -2,17 +2,19 @@ import argparse
 import os
 
 from prospector.adapters.http import default_client
+from prospector.adapters.jd_fetcher import JobDescriptionFetcher
 from prospector.adapters.miners import build_miners
+from prospector.adapters.pdf_chrome import ChromePdfRenderer
 from prospector.adapters.senders import EmlDraftSender, GmailWebSender, SendError, SmtpSender
 from prospector.core import config
 from prospector.core.config import Color, load_env
 from prospector.core.db import get_repository
 from prospector.domain.lead import LeadStatus
-from prospector.engine.tailor import tailor_cv
 from prospector.ports import MiningOptions
 from prospector.profile import ProfileError, load_profile
 from prospector.services.mining import MiningService
 from prospector.services.outreach import OutreachError, OutreachService
+from prospector.services.tailoring import TailoringError, TailoringService
 
 
 def _open_repo_verbose():
@@ -171,13 +173,56 @@ def cmd_status_update(args, repo):
         print(f"{Color.RED}Lead #{args.id} não encontrado.{Color.RESET}")
 
 
+def _pct(value):
+    return "n/d" if value is None else f"{value:.1f}%"
+
+
 def cmd_tailor(args, repo):
     jd_text = args.jd or ""
     if args.jd and os.path.exists(args.jd):
         with open(args.jd, "r", encoding="utf-8") as f:
             jd_text = f.read()
-    tailor_cv(empresa=args.empresa, vaga=args.vaga, lead_id=args.lead, url=args.url,
-              skills=args.skills, jd_text=jd_text, lang=args.lang)
+    profile = load_profile()
+    http = default_client()
+    service = TailoringService(profile, repo, JobDescriptionFetcher(http),
+                               ChromePdfRenderer(profile.chrome_path), config.OUTPUT_DIR)
+    print(f"{Color.CYAN}🎯 Calibrando currículo...{Color.RESET}")
+    try:
+        r = service.run(company=args.empresa, role=args.vaga, lead_id=args.lead, url=args.url,
+                        requirements_text=args.skills or "", jd_text=jd_text, lang=args.lang,
+                        render_pdf=not args.sem_pdf)
+    except TailoringError as e:
+        print(f"{Color.RED}❌ {e}{Color.RESET}")
+        return
+
+    color = Color.RESET if r.coverage is None else (
+        Color.GREEN if r.coverage >= 80 else Color.YELLOW if r.coverage >= 60 else Color.RED)
+    print("=" * 70)
+    print(f"📊 {Color.BOLD}ADERÊNCIA CURRÍCULO x VAGA{Color.RESET}")
+    print("=" * 70)
+    print(f"🏢 {r.company} | {r.role} | CV em {r.language}")
+    print(f"🌐 {r.url or 'sem URL'} | descrição da vaga: {'sim' if r.jd_available else 'não'}")
+    print(f"🎯 Cobertura de requisitos: {color}{Color.BOLD}{_pct(r.coverage)}{Color.RESET} "
+          f"({len(r.matched)} de {len(r.requirements)})   Similaridade textual: {_pct(r.similarity)}")
+    print("-" * 70)
+    if r.matched:
+        print(f"✅ {Color.GREEN}Você tem:{Color.RESET} {', '.join(r.matched)}")
+    if r.missing:
+        print(f"⚠️ {Color.YELLOW}Lacunas:{Color.RESET} {', '.join(r.missing)}")
+        print(f"   {Color.DIM}Não foram adicionadas ao CV. Se você domina alguma, inclua em 'skills' ou "
+              f"'palavras_opcionais_cv' do perfil.{Color.RESET}")
+    if r.injected:
+        print(f"➕ Inseridas no CV (declaradas no perfil): {', '.join(r.injected)}")
+    print(f"🏷️ Título: {r.headline}")
+    print("=" * 70)
+    for w in r.warnings:
+        print(f"{Color.YELLOW}⚠️ {w}{Color.RESET}")
+    print(f"📄 HTML: {r.html_path}")
+    if r.pdf_ok:
+        print(f"{Color.GREEN}{Color.BOLD}✅ PDF: {r.pdf_path}{Color.RESET}")
+    print(f"\n{Color.BOLD}--- Mensagem de abordagem ---{Color.RESET}\n{Color.CYAN}Assunto:{Color.RESET} {r.subject}\n")
+    print(r.message)
+    print("-" * 70)
 
 
 def build_parser():
@@ -194,7 +239,7 @@ def build_parser():
     p.add_argument("--limit", type=int, default=50, help="Máximo de vagas por fonte; no Greenhouse, por empresa (padrão: 50)")
     p.set_defaults(func=cmd_mine)
 
-    p = sub.add_parser("tailor", help="Calibrar currículo com cobertura de keywords (Resume-Matcher)")
+    p = sub.add_parser("tailor", help="Comparar currículo x vaga e gerar CV calibrado (sem inventar skills)")
     p.add_argument("--lead", type=int, help="ID do lead no funil para calibrar automaticamente")
     p.add_argument("--empresa", help="Nome da empresa")
     p.add_argument("--vaga", default="Software Engineer", help="Título do cargo")
@@ -203,6 +248,7 @@ def build_parser():
     p.add_argument("--jd", help="Texto ou caminho do arquivo de Job Description")
     p.add_argument("--lang", choices=["en", "pt"], default=None,
                    help="Idioma do currículo (padrão: região do lead, ou en)")
+    p.add_argument("--sem-pdf", action="store_true", help="Gerar só o HTML calibrado")
     p.set_defaults(func=cmd_tailor)
 
     p = sub.add_parser("list", help="Listar leads no funil")

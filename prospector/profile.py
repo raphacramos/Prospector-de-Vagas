@@ -38,6 +38,8 @@ class Profile:
     skills: List[str] = field(default_factory=list)
     palavras_opcionais_cv: List[str] = field(default_factory=list)
     ancora_insercao_cv: str = ""
+    headline_cv: str = "Software Engineer | {destaques}"
+    destaques_padrao: str = "Backend"
     max_caracteres_mensagem: int = 400
     chrome_path: str = ""
     fontes: Dict[str, List[str]] = field(default_factory=dict)
@@ -96,6 +98,8 @@ def load_profile(path=None):
         followups=dict(_require(data, "followups", path)), curriculos=dict(_require(data, "curriculos", path)),
         skills=list(data.get("skills", [])), palavras_opcionais_cv=list(data.get("palavras_opcionais_cv", [])),
         ancora_insercao_cv=data.get("ancora_insercao_cv", ""),
+        headline_cv=data.get("headline_cv", "Software Engineer | {destaques}"),
+        destaques_padrao=data.get("destaques_padrao", "Backend"),
         max_caracteres_mensagem=int(data.get("max_caracteres_mensagem", 400)),
         chrome_path=data.get("chrome_path", ""), fontes=dict(data.get("fontes", {})), path=path,
     )
