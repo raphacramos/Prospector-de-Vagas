@@ -28,6 +28,13 @@ class JobDescriptionFetcher:
                 parts.append(data.get("additionalPlain", ""))
                 return data.get("text", ""), " ".join(p for p in parts if p).strip()
 
+        m = re.search(r"jobs\.ashbyhq\.com/([^/?#]+)/([0-9a-fA-F-]{36})", url)
+        if m:
+            data = self.http.get_json(f"https://api.ashbyhq.com/posting-api/job-board/{m.group(1)}")
+            for job in (data or {}).get("jobs", []) if isinstance(data, dict) else []:
+                if job.get("id") == m.group(2):
+                    return job.get("title", ""), job.get("descriptionPlain") or clean_html(job.get("descriptionHtml", ""))
+
         raw_html = self.http.get_text(url)
         if not raw_html:
             return "", ""

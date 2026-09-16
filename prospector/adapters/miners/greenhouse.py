@@ -1,19 +1,10 @@
 """APIs publicas de job boards do Greenhouse."""
-from prospector.adapters.miners.filters import clean_url, matches_query
+from prospector.adapters.miners.filters import clean_url, is_engineering_title, matches_query
 from prospector.domain.lead import Lead, Region
 from prospector.ports import SourceUnavailable
 
 # automattic, posthog e supabase sairam do Greenhouse (a API responde erro).
 DEFAULT_COMPANIES = ["canonical", "gitlab", "brex", "reddit", "elastic", "cloudflare"]
-
-ENG_KEYWORDS = ["software engineer", "backend", "back-end", "systems engineer", "platform",
-                "data engineer", "infrastructure", "python", "associate"]
-NON_ENG_KEYWORDS = ["counsel", "account executive", "recruiter", "marketing", "sales", "finance", "analyst"]
-
-
-def is_engineering_title(title):
-    t = (title or "").lower()
-    return any(k in t for k in ENG_KEYWORDS) and not any(k in t for k in NON_ENG_KEYWORDS)
 
 
 class GreenhouseMiner:

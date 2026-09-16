@@ -11,7 +11,9 @@ def fixture_text(name):
 
 
 class FakeHttp:
-    """Mapeia trecho de URL -> nome do fixture (ou None para simular falha)."""
+    """Mapeia trecho de URL -> nome do fixture. None simula HTTP 404; NETWORK simula falha de rede."""
+
+    NETWORK = "__network__"
 
     def __init__(self, routes):
         self.routes = routes
@@ -24,6 +26,9 @@ class FakeHttp:
             if fragment in url:
                 if name is None:
                     self.last_error = "HTTP 404"
+                    return None
+                if name == self.NETWORK:
+                    self.last_error = "URLError: timed out"
                     return None
                 return fixture_text(name)
         self.last_error = "rota não mapeada"

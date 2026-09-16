@@ -59,6 +59,8 @@
 
   "fontes": {
     "github": ["backend-br/vagas", "datascience-br/vagas", "react-brasil/vagas"],
-    "greenhouse": ["canonical", "gitlab", "brex", "reddit", "elastic", "cloudflare"]
+    "greenhouse": ["canonical", "gitlab", "brex", "reddit", "elastic", "cloudflare"],
+    "lever": ["spotify", "palantir", "zoox", "binance"],
+    "ashby": ["posthog", "supabase", "linear", "ramp", "replit", "notion"]
   }
 }

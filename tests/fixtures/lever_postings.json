@@ -1,0 +1,11 @@
+[
+  {"id": "a1", "text": "Backend Engineer, Payments", "hostedUrl": "https://jobs.lever.co/acme/a1",
+   "createdAt": 1788825600000, "workplaceType": "remote",
+   "categories": {"location": "São Paulo", "team": "Payments", "department": "Engineering"},
+   "descriptionPlain": "We use Python and Kafka."},
+  {"id": "a2", "text": "Account Executive", "hostedUrl": "https://jobs.lever.co/acme/a2",
+   "createdAt": 1788825600000, "categories": {"location": "Remote"}},
+  {"id": "a3", "text": "Platform Engineer", "hostedUrl": "https://jobs.lever.co/acme/a3?lever-origin=applied",
+   "createdAt": 1788739200000, "workplaceType": "onsite",
+   "categories": {"location": "Berlin", "team": "Infra"}, "descriptionPlain": "Go and Kubernetes."}
+]

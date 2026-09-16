@@ -12,6 +12,7 @@ from prospector.core.db import get_repository
 from prospector.domain.lead import LeadStatus
 from prospector.ports import MiningOptions
 from prospector.profile import ProfileError, load_profile
+from prospector.services.funnel import funnel_stats
 from prospector.services.mining import MiningService
 from prospector.services.outreach import OutreachError, OutreachService
 from prospector.services.tailoring import TailoringError, TailoringService
@@ -225,11 +226,26 @@ def cmd_tailor(args, repo):
     print("-" * 70)
 
 
+def cmd_stats(args, repo):
+    per_source, total = funnel_stats(repo.funnel_rows())
+    if not total.leads:
+        print("Nenhuma vaga no funil.")
+        return
+    print(f"\n{Color.BOLD}{'FONTE':<30} {'LEADS':>6} {'CONTAT.':>8} {'RESP.':>6} {'TAXA':>7} {'DESC.':>6}{Color.RESET}")
+    print("=" * 68)
+    for st in per_source + [total]:
+        rate = "-" if st.reply_rate is None else f"{st.reply_rate:.0f}%"
+        bold = Color.BOLD if st is total else ""
+        print(f"{bold}{st.source[:30]:<30} {st.leads:>6} {st.contacted:>8} {st.replied:>6} {rate:>7} "
+              f"{st.discarded:>6}{Color.RESET}")
+    print(f"\n{Color.DIM}TAXA = respostas ou entrevistas / leads contatados (por histórico).{Color.RESET}\n")
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Prospector CLI - Sistema de Mineração Técnica & Funil Ágil")
     sub = parser.add_subparsers(dest="command")
 
-    p = sub.add_parser("mine", help="Minerar vagas (GitHub, Hacker News, Greenhouse, SimplifyJobs)")
+    p = sub.add_parser("mine", help="Minerar vagas (GitHub, Hacker News, Greenhouse, Lever, Ashby, SimplifyJobs)")
     p.add_argument("--source", choices=["all"] + list(build_miners(http=None)), default="all")
     p.add_argument("--query", default=None, help="Termo de busca/filtro (ex: Python, Backend, Remote)")
     p.add_argument("--all-levels", action="store_true", help="Incluir níveis acima de Júnior/Entry-Level no GitHub")
@@ -275,6 +291,9 @@ def build_parser():
 
     p = sub.add_parser("followups", help="Ver alertas de follow-up (D+5)")
     p.set_defaults(func=cmd_followups)
+
+    p = sub.add_parser("stats", help="Métricas do funil por fonte (taxa de resposta)")
+    p.set_defaults(func=cmd_stats)
 
     p = sub.add_parser("update", help="Atualizar status de um lead no funil")
     p.add_argument("id", type=int)

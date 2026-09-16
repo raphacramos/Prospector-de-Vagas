@@ -1,8 +1,8 @@
 """Cliente HTTP da stdlib com TLS verificado.
 
 A v2 usava ssl._create_unverified_context(). Aqui a verificacao fica ligada; se o
-Python do macOS nao tiver os certificados instalados, cai para o curl (que usa os
-certificados do sistema e tambem verifica). Para corrigir o Python de vez, rode
+Python do macOS recusar o certificado (certificados nao instalados), cai para o curl,
+que usa os certificados do sistema e tambem verifica. Para corrigir o Python de vez, rode
 "Install Certificates.command" na pasta do Python em /Applications.
 """
 import json
@@ -14,6 +14,11 @@ import urllib.error
 import urllib.request
 
 DEFAULT_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Prospector/3"
+
+
+def _is_certificate_error(exc):
+    reason = getattr(exc, "reason", exc)
+    return isinstance(reason, ssl.SSLError) or "CERTIFICATE" in str(exc).upper()
 
 
 class UrllibHttpClient:
@@ -49,9 +54,10 @@ class UrllibHttpClient:
             return None  # erro do servidor: o curl teria o mesmo resultado
         except Exception as e:  # rede, DNS, certificado
             self.last_error = f"{type(e).__name__}: {e}"
-            self._log(f"urllib falhou ({self.last_error}); tentando curl")
-        if not self.use_curl_fallback:
-            return None
+            if not (self.use_curl_fallback and _is_certificate_error(e)):
+                self._log(self.last_error)
+                return None  # timeout/DNS: o curl falharia igual e dobraria a espera
+            self._log(f"certificado recusado pelo Python ({self.last_error}); tentando curl")
         return self._curl(url, h)
 
     def _curl(self, url, headers):

@@ -172,7 +172,7 @@ class MiningServiceTest(unittest.TestCase):
         self.assertEqual(sorted(l.location for l in report.leads), ["Remote in USA", "Remote, LATAM"])
 
     def test_registro_tem_as_fontes_da_cli(self):
-        self.assertEqual(list(build_miners(None)), ["github", "hn", "greenhouse", "simplify"])
+        self.assertEqual(list(build_miners(None)), ["github", "hn", "greenhouse", "lever", "ashby", "simplify"])
 
 
 if __name__ == "__main__":

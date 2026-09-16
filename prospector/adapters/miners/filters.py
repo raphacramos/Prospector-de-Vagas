@@ -92,3 +92,22 @@ def date_from_age(age, today=None):
     n, unit = int(m.group(1)), m.group(2)
     days = {"h": 0, "d": n, "w": 7 * n, "mo": 30 * n}[unit]
     return ((today or date.today()) - timedelta(days=days)).isoformat()
+
+
+# Cargo tecnico de execucao: precisa de "engineer/developer/SRE" e nao pode ser gestao,
+# vendas ou produto. Antes "platform" e "associate" sozinhos aceitavam "Product Manager -
+# Data Platform" e "Associate Director".
+ENG_TITLE = re.compile(r"\b(engineer|developer|programmer|sre)\b", re.IGNORECASE)
+NON_ENG_TITLE = re.compile(
+    r"\b(director|manager|head of|vp|vice president|chief|counsel|account executive|recruiter|"
+    r"marketing|sales|finance|analyst|designer)\b", re.IGNORECASE)
+
+
+def is_engineering_title(title):
+    return bool(ENG_TITLE.search(title or "")) and not NON_ENG_TITLE.search(title or "")
+
+
+def is_network_failure(http):
+    """True quando a ultima falha foi de rede (nao um HTTP 404/500 do servidor)."""
+    err = getattr(http, "last_error", None) or ""
+    return bool(err) and not err.startswith("HTTP ")
