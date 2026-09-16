@@ -3,24 +3,14 @@ import os
 
 from prospector.core.config import Color, load_env
 from prospector.core.db import get_repository
-from prospector.domain.lead import Lead, LeadStatus, region_from_source
+from prospector.adapters.http import default_client
+from prospector.adapters.miners import build_miners
+from prospector.domain.lead import LeadStatus
 from prospector.engine.copywriter import get_message_content
 from prospector.engine.mailer import create_eml_draft, open_gmail_web, send_smtp
 from prospector.engine.tailor import tailor_cv
-from prospector.miners.github import mine_github
-from prospector.miners.greenhouse import mine_greenhouse
-from prospector.miners.hacker_news import mine_hacker_news
-from prospector.miners.simplify import mine_simplify
-
-
-def lead_from_miner_dict(d):
-    """Converte o dict dos mineradores (formato v2) em Lead."""
-    return Lead(
-        company=d["company"], title=d["title"], source=d["source"], url=d.get("url", ""),
-        region=region_from_source(d["source"]), emails=list(d.get("emails", [])),
-        ats_links=[l for l in d.get("fast_links", []) if l], labels=[l for l in d.get("labels", []) if l],
-        location=d.get("location", ""), posted_at=d.get("created_at", ""), raw_body=d.get("raw_body", ""),
-    )
+from prospector.ports import MiningOptions
+from prospector.services.mining import MiningService
 
 
 def _open_repo_verbose():
@@ -38,22 +28,27 @@ def _load_lead(repo, lead_id):
 
 
 def cmd_mine(args, repo):
-    raw = []
-    if args.source in ["all", "github"]:
-        raw.extend(mine_github(junior_only=not args.all_levels, query=args.query))
-    if args.source in ["all", "hn"]:
-        raw.extend(mine_hacker_news(query=args.query or "Python"))
-    if args.source in ["all", "greenhouse"]:
-        raw.extend(mine_greenhouse(query=args.query))
-    if args.source in ["all", "simplify"]:
-        raw.extend(mine_simplify(query=args.query, remote_only=args.remote_only, fast_ats_only=not args.all_ats))
+    miners = build_miners(default_client())
+    names = list(miners) if args.source == "all" else [args.source]
+    options = MiningOptions(query=args.query, all_levels=args.all_levels, remote_only=args.remote_only,
+                            all_ats=args.all_ats, limit=args.limit)
+    report = MiningService(miners, repo).run(
+        names, options,
+        on_source_start=lambda m: print(f"{Color.CYAN}🔍 Minerando {m.label}...{Color.RESET}"),
+    )
 
-    leads = [lead_from_miner_dict(d) for d in raw]
-    inserted, duplicates = repo.add_many(leads)
-    print(f"\n{Color.BOLD}✨ Total minerado: {len(leads)} vagas qualificadas "
-          f"({inserted} novas, {duplicates} já estavam no funil).{Color.RESET}\n")
-    for idx, lead in enumerate(leads, 1):
-        print(f"[{idx}] {lead.title} | {lead.company}")
+    for res in report.sources.values():
+        if res.error:
+            print(f"{Color.RED}❌ {res.label} indisponível: {res.error}{Color.RESET}")
+        else:
+            print(f"{Color.GREEN}✅ {res.label}: {res.found} vagas{Color.RESET}")
+        for w in res.warnings:
+            print(f"{Color.YELLOW}   ⚠️ {w}{Color.RESET}")
+
+    print(f"\n{Color.BOLD}✨ Total minerado: {len(report.leads)} vagas qualificadas "
+          f"({report.inserted} novas, {report.duplicates} já estavam no funil).{Color.RESET}\n")
+    for idx, lead in enumerate(report.leads, 1):
+        print(f"[{idx}] {lead.title} | {lead.company}" + (f" | {lead.location}" if lead.location else ""))
         if lead.emails:
             print(f"    📬 E-mail direto: {', '.join(lead.emails)}")
         elif lead.ats_links:
@@ -159,11 +154,13 @@ def build_parser():
     sub = parser.add_subparsers(dest="command")
 
     p = sub.add_parser("mine", help="Minerar vagas (GitHub, Hacker News, Greenhouse, SimplifyJobs)")
-    p.add_argument("--source", choices=["all", "github", "hn", "greenhouse", "simplify"], default="all")
+    p.add_argument("--source", choices=["all"] + list(build_miners(http=None)), default="all")
     p.add_argument("--query", default=None, help="Termo de busca/filtro (ex: Python, Backend, Remote)")
     p.add_argument("--all-levels", action="store_true", help="Incluir níveis acima de Júnior/Entry-Level no GitHub")
-    p.add_argument("--remote-only", action="store_true", help="Filtrar apenas vagas remotas/LATAM/globais")
+    p.add_argument("--remote-only", action="store_true",
+                   help="Manter só vagas remotas/LATAM/globais (vale para todas as fontes)")
     p.add_argument("--all-ats", action="store_true", help="Desativar filtro restritivo de ATS rápido")
+    p.add_argument("--limit", type=int, default=50, help="Máximo de vagas por fonte; no Greenhouse, por empresa (padrão: 50)")
     p.set_defaults(func=cmd_mine)
 
     p = sub.add_parser("tailor", help="Calibrar currículo com cobertura de keywords (Resume-Matcher)")

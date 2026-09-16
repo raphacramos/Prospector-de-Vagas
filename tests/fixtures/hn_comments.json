@@ -1,0 +1,8 @@
+{"hits": [
+  {"objectID": "901", "parent_id": 900, "created_at": "2026-09-01T15:00:00Z",
+   "comment_text": "VersaFeed.com | SENIOR SOFTWARE ENGINEER (Python&#x2F;Django) | REMOTE (USA ONLY) | Full-time<p>ETL pipeline. Email jobs@versafeed.example.org or apply https:&#x2F;&#x2F;jobs.ashbyhq.com&#x2F;versafeed&#x2F;42</p>"},
+  {"objectID": "902", "parent_id": 901, "created_at": "2026-09-01T16:00:00Z",
+   "comment_text": "Is this role open to Canada?"},
+  {"objectID": "903", "parent_id": 900, "created_at": "2026-09-02T10:00:00Z",
+   "comment_text": "We are hiring Python engineers, YC W24, remote friendly.<p>Write to us.</p>"}
+]}

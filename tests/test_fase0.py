@@ -12,8 +12,6 @@ from prospector.core import config
 from prospector.domain.lead import Lead, Region, region_from_source
 from prospector.engine import mailer
 from prospector.engine.tailor import extract_canonical_skills
-from prospector.miners import greenhouse
-from prospector.miners.github import is_backend_role
 
 
 def make_lead(source, email="tech@empresa.com"):
@@ -61,33 +59,6 @@ class SkillsRegexTest(unittest.TestCase):
 
     def test_big_o(self):
         self.assertIn("Algorithms & Data Structures", extract_canonical_skills("reason about O(n) costs"))
-
-
-class GithubFilterTest(unittest.TestCase):
-    def test_english_nao_e_backend(self):
-        self.assertFalse(is_backend_role("Vendedor com english fluente"))
-
-    def test_backend(self):
-        self.assertTrue(is_backend_role("[Remoto] Desenvolvedor Back-end Júnior"))
-        self.assertTrue(is_backend_role("Engenheira de Dados Jr - Python"))
-
-
-class GreenhouseQueryTest(unittest.TestCase):
-    JOBS = {"jobs": [
-        {"title": "Backend Engineer, Python", "absolute_url": "https://a", "updated_at": "2026-09-01"},
-        {"title": "Platform Engineer (Go)", "absolute_url": "https://b", "updated_at": "2026-09-01"},
-    ]}
-
-    def run_miner(self, query):
-        with mock.patch.object(greenhouse, "fetch_json", return_value=self.JOBS), \
-             mock.patch("builtins.print"):
-            return greenhouse.mine_greenhouse(query=query, companies=["acme"])
-
-    def test_sem_query_traz_tudo(self):
-        self.assertEqual(len(self.run_miner(None)), 2)
-
-    def test_query_filtra(self):
-        self.assertEqual([l["url"] for l in self.run_miner("python")], ["https://a"])
 
 
 class OutreachTest(unittest.TestCase):

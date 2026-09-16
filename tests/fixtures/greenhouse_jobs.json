@@ -1,0 +1,8 @@
+{"jobs": [
+  {"title": "Backend Engineer, Python", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/1?gh_src=abc",
+   "updated_at": "2026-09-14T16:01:39-04:00", "location": {"name": "Remote, LATAM"}},
+  {"title": "Platform Engineer", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/2",
+   "updated_at": "2026-09-13T10:00:00-04:00", "location": {"name": "San Francisco, CA"}},
+  {"title": "Sales Engineer, Platform", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/3",
+   "updated_at": "2026-09-13T10:00:00-04:00", "location": {"name": "Remote"}}
+]}

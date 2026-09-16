@@ -1,0 +1,22 @@
+[
+  {"title": "[Remoto] Desenvolvedor Back-end Python Júnior na Acme Tecnologia",
+   "html_url": "https://github.com/backend-br/vagas/issues/1?utm_source=x",
+   "created_at": "2026-09-10T12:00:00Z",
+   "labels": [{"name": "Júnior"}, {"name": "Remoto"}],
+   "body": "## Nossa empresa\nA Acme faz APIs.\n## Como se candidatar\nEnvie para vagas@acme.com.br ou https://jobs.lever.co/acme/abc-123"},
+  {"title": "[Alocação] Back-end developer - NomeDaEmpresa",
+   "html_url": "https://github.com/backend-br/vagas/issues/2", "created_at": "2026-09-16T00:14:14Z",
+   "labels": [{"name": "Júnior"}],
+   "body": "## Nossa empresa\n\nInforme a descrição da empresa.\n\n## Descrição da vaga\n\nInforme a descrição da vaga.\nPython backend"},
+  {"title": "[Híbrido - SP] Vendedor Júnior - Loja X",
+   "html_url": "https://github.com/backend-br/vagas/issues/3", "created_at": "2026-09-12T00:00:00Z",
+   "labels": [], "body": "Vaga para vendedor com english fluente"},
+  {"title": "[Remoto] Engenheiro de Dados Sênior - DataCo",
+   "html_url": "https://github.com/backend-br/vagas/issues/4", "created_at": "2026-09-12T00:00:00Z",
+   "labels": [{"name": "Sênior"}], "body": "Pipelines em Python. Candidatura: https://jobs.ashbyhq.com/dataco/77"},
+  {"title": "[Presencial] Dev Backend Júnior",
+   "html_url": "https://github.com/backend-br/vagas/issues/5", "created_at": "2026-09-12T00:00:00Z",
+   "labels": [], "body": "Backend Node. Cadastre-se em https://acme.gupy.io/jobs/1"},
+  {"title": "PR qualquer", "html_url": "https://github.com/backend-br/vagas/pull/6",
+   "pull_request": {}, "labels": [], "body": "python junior"}
+]
