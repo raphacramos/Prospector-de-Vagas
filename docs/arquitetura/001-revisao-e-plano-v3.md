@@ -98,10 +98,28 @@ Decisões-chave:
 | Fase | Entrega | Risco |
 |---|---|---|
 | **0: correções rápidas** (sem mudar a estrutura) ✅ feita | Função única `region_of(lead)`; `send` aborta sem PDF; regex C++/Go; filtro GitHub; `--query` no Greenhouse; saídas em `data/out/`; gmail/draft sem marcar como enviado | Baixo |
-| **1: modelo de domínio** | `Lead` dataclass, `LeadStatus`, `Region`; repositório SQLite com migração v2→v3 | Médio (mexe no banco; fazer backup do `.db`) |
-| **2: mineradores com contrato** | `Miner` Protocol, registro, sem `print`, testes com fixtures | Baixo |
-| **3: outreach** | `Sender` ports, `profile.toml`, templates fora do código, status honesto | Baixo |
-| **4: tailoring honesto** | Skills do profile, "cobertura de keywords", sem injeção fora do profile, Chrome configurável | Baixo |
-| **5: opcional** | Métricas do funil (`prospector stats`), mineradores Lever/Ashby diretos, `--dry-run` no `send` | — |
+| **1: modelo de domínio** ✅ feita | `Lead` dataclass, `LeadStatus`, `Region`; repositório SQLite com migração v2→v3 | Médio (mexe no banco; fazer backup do `.db`) |
+| **2: mineradores com contrato** ✅ feita | `Miner` Protocol, registro, sem `print`, testes com fixtures | Baixo |
+| **3: outreach** ✅ feita | `Sender` ports, `profile.toml`, templates fora do código, status honesto | Baixo |
+| **4: tailoring honesto** ✅ feita | Skills do profile, "cobertura de keywords", sem injeção fora do profile, Chrome configurável | Baixo |
+| **5: opcional** ✅ feita | Métricas do funil (`prospector stats`), mineradores Lever/Ashby diretos, `--dry-run` no `send` | — |
 
 Comandos do ECC úteis por fase: `/plan` (detalhar uma fase), `/python-review` (revisão após cada fase), agente `tdd-guide` (fases 1 e 2) e `code-architect` (validar a estrutura da fase 1).
+
+## 6. Resultado da implementação (v3.0.0)
+
+As cinco fases foram implementadas em commits separados, com 76 testes (`python3 -m unittest discover -s tests`). Houve alguns desvios em relação ao plano:
+
+| Plano | Implementado | Motivo |
+|---|---|---|
+| `profile.toml` com `tomllib` | `profile.json` (`data/profile.json`, com `profile.example.json` versionado) | `tomllib` só existe a partir do Python 3.11; JSON mantém o suporte a 3.8+ sem dependências |
+| Comando `mark-sent` | `update <ID> mensagem_enviada --nota ...` | O `update` já cobre o caso e agora grava o histórico |
+| Envio sem PDF com `--sem-anexo` | Mantido. `--dry-run` mostra a mensagem mesmo sem PDF e lista os problemas como avisos | Permite revisar o texto antes de ter o currículo pronto |
+| Fallback para `curl` em qualquer erro | Só em erro de certificado | Em timeout, o `curl` só dobrava a espera |
+| Mineradores Lever/Ashby "opcionais" | Implementados, com empresas configuráveis em `fontes` | Ampliam as fontes de ATS de etapa única |
+
+Ficam como pendências:
+
+- **Templates:** continuam com mais de 400 caracteres. O `show` agora avisa, mas o texto é decisão do autor.
+- **Nomes de empresa no GitHub:** a extração do título é heurística. Quando falha, o lead recebe o label `empresa-nao-identificada` e o `show` avisa.
+- **`From` do rascunho `.eml`:** usa o nome e o e-mail do perfil, enquanto o SMTP usa `EMAIL_USER`. Se forem contas diferentes, alinhe as duas.
